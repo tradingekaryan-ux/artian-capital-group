@@ -1,13 +1,15 @@
 # Artian Capital Group
 
-> **Status pembangunan (16 Okt 2026):** kode lengkap, `lint/typecheck/test/build` hijau (38 halaman).
+> **Status pembangunan (16 Okt 2026):** kode lengkap, `lint/typecheck/test/build` hijau (38 halaman), **smoke test on-chain end-to-end LULUS di devnet**.
 > Database Supabase **`vysgkjqbmgbbowsxafok`** sudah hidup: `apply_all.sql` (0001_init + 0002_storage + seed pricing) lewat MCP `apply_migration`; RLS advisors bersih; bucket `token-assets` aktif.
 > Smoke test lulus: landing/explore/token detail/create/dashboard/admin (role guard + API 403), signup email (SMTP Supabase), auto-`profiles`+`wallets` ter-encrypt, seed 2 token live tampil & ter-sitemap.
 > SEO: `robots.txt`, `sitemap.xml` (static + token live), JSON-LD `WebSite` + `WebPage`+harga.
-> GitHub: repo private **`tradingekaryan-ux/artian-capital-group`** — 2 commit terpush, CI hijau ×2, 7 actions secrets terpasang, **Job Worker terverifikasi jalan end-to-end** (dispatch manual sukses).
-> Adapter Cloudflare terpasang (`@opennextjs/cloudflare` + `wrangler.jsonc` + scripts `deploy`/`preview`) — build adapter lokal sukses (worker.js + aset 43MB).
-> **LIVE di produksi:** <https://artian-capital-group.trading-ekaryan.workers.dev> (Workers via `npm run deploy:cf`; secrets runtime terpasang; smoke login/dashboard/explore/token/admin lulus; sitemap/robots/JSON-LD memakai URL produksi).
-> Langkah berikutnya: ① **Helius API Key** (dashboard Helius → ikon key di top bar → salin) → isi `HELIUS_API_KEY` → rebuild + redeploy + secret GH, ② **airdrop devnet** ke treasury `4XSuNGXFqH2sSMteAxHWjF1y3Pgf5aCdBT29Ve2MUWSg` via <https://faucet.solana.com> → smoke on-chain, ③ (opsional) rotate kredensial yang pernah lewat chat.
+> GitHub: repo **public** `tradingekaryan-ux/artian-capital-group` (public → lulus validasi faucet), CI hijau, 7 actions secrets terpasang, **Job Worker terverifikasi jalan end-to-end**.
+> Adapter Cloudflare terpasang (`@opennextjs/cloudflare` + `wrangler.jsonc` + wrapper `scripts/cf-deploy.mjs` utk macOS < 13.5).
+> **LIVE di produksi:** <https://artian-capital-group.trading-ekaryan.workers.dev> (secrets runtime terpasang; smoke login/dashboard/explore/token/admin lulus; sitemap/robots/JSON-LD memakai URL produksi).
+> **On-chain devnet (via site live + worker lokal):** Helius key aktif, treasury 2.5 SOL (faucet.solana.com), wallet test 20 USDC (Circle) — order `create_token` (2 USDC → fee) → token **SMOKE** `7jjqC5F…` live (supply 1e9, mint+freeze revoked, muncul di explore) → order `create_pool` (10 USDC) → pool Raydium CPMM `Bb8qZniU…` aktif on-chain; order `confirmed` + `pools`/`tokens` tercatat.
+> Bug yang diperbaiki saat smoke: env string-kosong tak fallback (`envOr`), race confirm Workers → tx finalized tapi dilempar expired (`recoverExpiredSignature` + order disimpan sebelum bayar), Metaplex authority/creators (`0xa`/`0x36`), Raydium feePayer asing → PrivilegeEscalation + `reject(undefined)` (gas-drop user, feePayer default owner).
+> **Sisa:** ① rotate SEMUA kredensial yang pernah lewat chat (Supabase, PAT GitHub, Helius, token Cloudflare), ② spike/aturan fee-tier pool UI (F4), ③ lupa-password flow + QR deposit, ④ `JUPITER_API_KEY`/`RESEND_API_KEY` bila perlu.
 
 Komunitas financial market + launcher token Solana dengan liquidity pool, on-ramp USDC (topup/withdraw dari wallet eksternal), swap in-app, dan pembayaran fee pakai USDC — **tanpa biaya infrastruktur bulanan** (Supabase Free + Helius free + Cloudflare Pages + GitHub Actions cron).
 
