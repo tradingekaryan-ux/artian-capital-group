@@ -15,7 +15,7 @@ export default async function CreatePage({ params }: PageProps<"/[locale]/create
 
   return (
     <div className="mx-auto max-w-2xl">
-      <h1 className="mb-6 text-2xl font-bold">{t("title")}</h1>
+      <h1 className="mb-8 text-4xl sm:text-5xl">{t("title")}</h1>
       <CreateTokenWizard priceUsdc={price.amount_usdc ?? 2} />
     </div>
   );

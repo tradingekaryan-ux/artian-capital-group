@@ -1,103 +1,208 @@
 @import "tailwindcss";
 
 :root {
-  --background: #0b0e14;
-  --surface: #121722;
-  --surface-2: #1a2130;
-  --border: #232c3d;
-  --foreground: #e7ecf5;
-  --muted: #8b97ad;
-  --accent: #22d3a6;
-  --accent-2: #38bdf8;
-  --danger: #f87171;
-  --warning: #fbbf24;
+  --background: #7a2ff2;
+  --surface: #ffffff;
+  --surface-2: #ede9fe;
+  --surface-dark: #0c0c10;
+  --border: #000000;
+  --foreground: #ffffff;
+  --ink: #0c0c10;
+  --muted: rgba(255, 255, 255, 0.82);
+  --muted-ink: #3f3f46;
+  --accent: #d8ff3e;
+  --accent-ink: #0c0c10;
+  --accent-2: #0c0c10;
+  --danger: #ff5a5a;
+  --warning: #ffd60a;
+  --shadow-hard: 6px 6px 0 0 #000000;
+  --shadow-hard-sm: 3px 3px 0 0 #000000;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-surface: var(--surface);
   --color-surface-2: var(--surface-2);
+  --color-surface-dark: var(--surface-dark);
   --color-border: var(--border);
   --color-foreground: var(--foreground);
+  --color-ink: var(--ink);
   --color-muted: var(--muted);
+  --color-muted-ink: var(--muted-ink);
   --color-accent: var(--accent);
+  --color-accent-ink: var(--accent-ink);
   --color-accent-2: var(--accent-2);
   --color-danger: var(--danger);
   --color-warning: var(--warning);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
+  --font-display: var(--font-display);
 }
 
 body {
   background: var(--background);
+  background-image: radial-gradient(
+    ellipse 80% 55% at 50% -10%,
+    rgba(255, 255, 255, 0.22),
+    transparent 65%
+  );
   color: var(--foreground);
   font-family: var(--font-sans), system-ui, sans-serif;
   min-height: 100dvh;
 }
 
 ::selection {
-  background: color-mix(in oklab, var(--accent) 40%, transparent);
+  background: var(--accent);
+  color: var(--ink);
 }
 
+/* ── headings: heavy display ── */
+h1,
+h2,
+.h-display {
+  font-family: var(--font-display), var(--font-sans), system-ui, sans-serif;
+}
+h1 {
+  text-transform: uppercase;
+  letter-spacing: -0.02em;
+  line-height: 0.98;
+}
+
+.display {
+  font-family: var(--font-display), var(--font-sans), system-ui, sans-serif;
+  text-transform: uppercase;
+  letter-spacing: -0.02em;
+  font-weight: 900;
+}
+
+/* ── cards ── */
 .card {
   background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 14px;
+  color: var(--ink);
+  border: 2.5px solid var(--border);
+  border-radius: 20px;
+  box-shadow: var(--shadow-hard);
+  --muted: var(--muted-ink);
+  --accent: #5b21b6;
+  --accent-2: #5b21b6;
 }
 
+.card-dark {
+  background: var(--surface-dark);
+  color: var(--foreground);
+  border: 2.5px solid var(--border);
+  border-radius: 20px;
+  box-shadow: var(--shadow-hard);
+}
+
+/* window chrome bar (seperti header kartu retro) */
+.chrome {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 2.5px solid var(--border);
+  padding: 0.5rem 0.9rem;
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+.chrome-dots {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+}
+.chrome-dots span {
+  width: 10px;
+  height: 10px;
+  border: 2px solid #000;
+  background: #fff;
+  display: inline-block;
+}
+.chrome-dots span:nth-child(2) {
+  background: var(--accent);
+}
+.card .chrome {
+  border-radius: 17.5px 17.5px 0 0;
+}
+.card-dark .chrome {
+  border-radius: 17.5px 17.5px 0 0;
+}
+
+/* ── buttons ── */
 .btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 0.5rem;
-  border-radius: 10px;
-  padding: 0.55rem 1rem;
-  font-weight: 600;
-  font-size: 0.9rem;
-  transition: opacity 0.15s ease, transform 0.05s ease;
+  border-radius: 999px;
+  border: 2.5px solid var(--border);
+  padding: 0.55rem 1.15rem;
+  font-weight: 800;
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  box-shadow: var(--shadow-hard-sm);
+  transition: transform 0.08s ease, box-shadow 0.08s ease;
   cursor: pointer;
+  color: var(--ink);
+  background: #fff;
 }
 .btn:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+  box-shadow: none;
 }
 .btn:not(:disabled):active {
-  transform: translateY(1px);
+  transform: translate(3px, 3px);
+  box-shadow: 0 0 0 0 #000;
 }
 .btn-primary {
-  background: var(--accent);
-  color: #04110c;
+  background: #d8ff3e;
+  color: var(--accent-ink);
 }
 .btn-secondary {
-  background: var(--surface-2);
-  color: var(--foreground);
-  border: 1px solid var(--border);
+  background: #ffffff;
+  color: var(--ink);
+}
+.btn-dark {
+  background: var(--surface-dark);
+  color: #ffffff;
 }
 .btn-danger {
-  background: color-mix(in oklab, var(--danger) 18%, transparent);
-  color: var(--danger);
-  border: 1px solid color-mix(in oklab, var(--danger) 35%, transparent);
+  background: var(--danger);
+  color: #ffffff;
 }
 
+/* ── forms ── */
 .input {
   width: 100%;
-  background: var(--background);
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  padding: 0.6rem 0.75rem;
-  color: var(--foreground);
+  background: #ffffff;
+  color: var(--ink);
+  border: 2.5px solid var(--border);
+  border-radius: 14px;
+  padding: 0.6rem 0.85rem;
   font-size: 0.92rem;
+  box-shadow: var(--shadow-hard-sm);
 }
 .input:focus {
-  outline: 2px solid color-mix(in oklab, var(--accent) 45%, transparent);
+  outline: 3px solid var(--accent);
   outline-offset: 1px;
-  border-color: var(--accent);
+  border-color: var(--border);
+}
+.input::placeholder {
+  color: #9ca3af;
 }
 
 .label {
   display: block;
-  font-size: 0.8rem;
-  color: var(--muted);
+  font-size: 0.75rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: inherit;
+  opacity: 0.85;
   margin-bottom: 0.35rem;
 }
 
@@ -105,9 +210,80 @@ body {
   font-family: var(--font-mono), ui-monospace, monospace;
 }
 
-.gradient-text {
-  background: linear-gradient(120deg, var(--accent), var(--accent-2));
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
+/* highlight teks ala sticker */
+.hl {
+  display: inline-block;
+  background: #ffffff;
+  color: var(--ink);
+  border: 2.5px solid #000;
+  border-radius: 12px;
+  box-shadow: var(--shadow-hard-sm);
+  padding: 0 0.25em;
+}
+.hl-lime {
+  background: var(--accent);
+}
+
+/* pill / badge */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  border: 2.5px solid #000;
+  border-radius: 999px;
+  background: #fff;
+  color: var(--ink);
+  padding: 0.25rem 0.75rem;
+  font-size: 0.72rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  box-shadow: var(--shadow-hard-sm);
+}
+
+/* ── ticker marquee ── */
+.ticker {
+  overflow: hidden;
+  background: var(--accent);
+  border-bottom: 2.5px solid #000;
+  color: var(--ink);
+}
+.ticker-track {
+  display: flex;
+  width: max-content;
+  animation: ticker-scroll 28s linear infinite;
+}
+.ticker-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.45rem 1.25rem;
+  font-family: var(--font-display), var(--font-sans), system-ui, sans-serif;
+  font-weight: 900;
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  white-space: nowrap;
+}
+@keyframes ticker-scroll {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
+  }
+}
+
+/* ── tables dalam kartu ── */
+.card table th {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-weight: 800;
+  color: var(--muted-ink);
+}
+
+/* link */
+.card a {
+  font-weight: 600;
 }

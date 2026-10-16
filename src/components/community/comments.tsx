@@ -71,10 +71,12 @@ export function CommentsSection({
   }
 
   return (
-    <section className="card p-5">
-      <h2 className="mb-3 font-semibold">
-        {t("comments")} <span className="text-muted">({comments.length})</span>
-      </h2>
+    <section className="card overflow-hidden">
+      <div className="chrome">
+        <span className="chrome-dots"><span /><span /><span /></span>
+        <span className="text-muted-ink">{t("comments")} ({comments.length})</span>
+      </div>
+      <div className="p-5">
 
       <form onSubmit={submit} className="flex flex-col gap-2">
         <textarea
@@ -85,27 +87,27 @@ export function CommentsSection({
           onChange={(e) => setBody(e.target.value)}
         />
         <div className="flex items-center justify-between">
-          <span className="text-xs text-muted">{body.length}/1000</span>
+          <span className="text-xs text-muted-ink">{body.length}/1000</span>
           <button className="btn btn-primary" disabled={busy || !body.trim()}>
             {busy ? "…" : t("commentCta")}
           </button>
         </div>
-        {error && <p className="text-sm text-danger">{error}</p>}
+        {error && <p className="text-sm font-bold text-[#b91c1c]">{error}</p>}
       </form>
 
-      <ul className="mt-4 flex flex-col divide-y divide-border">
+      <ul className="mt-4 flex flex-col divide-y divide-black/10">
         {comments.map((c) => (
           <li key={c.id} className="py-3 text-sm">
             <div className="flex items-center justify-between">
-              <span className="font-medium">@{c.username}</span>
-              <span className="text-xs text-muted">
+              <span className="font-bold">@{c.username}</span>
+              <span className="text-xs text-muted-ink">
                 {new Date(c.createdAt).toLocaleString()}
               </span>
             </div>
-            <p className="mt-1 whitespace-pre-wrap text-muted">{c.body}</p>
+            <p className="mt-1 whitespace-pre-wrap text-muted-ink">{c.body}</p>
             {currentUserId === c.userId && (
               <button
-                className="mt-1 text-xs text-danger hover:underline"
+                className="mt-1 text-xs font-bold text-[#b91c1c] hover:underline"
                 onClick={() => remove(c.id)}
               >
                 delete
@@ -114,9 +116,10 @@ export function CommentsSection({
           </li>
         ))}
         {comments.length === 0 && (
-          <li className="py-3 text-sm text-muted">Belum ada komentar — jadi yang pertama.</li>
+          <li className="py-3 text-sm text-muted-ink">Belum ada komentar — jadi yang pertama.</li>
         )}
       </ul>
+      </div>
     </section>
   );
 }

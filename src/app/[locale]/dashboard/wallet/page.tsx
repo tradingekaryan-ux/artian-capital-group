@@ -27,49 +27,68 @@ export default async function WalletPage({ params }: PageProps<"/[locale]/dashbo
   return (
     <div className="grid gap-6 lg:grid-cols-2">
       <div className="flex flex-col gap-6">
-        <section className="card p-5">
-          <h1 className="text-lg font-semibold">{t("title")}</h1>
-          <div className="mt-4 grid grid-cols-2 gap-4">
-            <div>
-              <p className="text-xs text-muted">{t("usdcBalance")}</p>
-              <p className="mt-1 text-2xl font-bold">
+        <section className="card overflow-hidden">
+          <div className="chrome">
+            <span className="chrome-dots"><span /><span /><span /></span>
+            <span className="text-muted-ink">{t("title")}</span>
+          </div>
+          <div className="p-5">
+          <div className="mt-2 grid grid-cols-2 gap-4">
+            <div className="rounded-xl border-2 border-black bg-[#f5f3ff] px-4 py-3">
+              <p className="text-[10px] font-bold uppercase tracking-wide text-muted-ink">{t("usdcBalance")}</p>
+              <p className="display mt-1 text-3xl">
                 {formatNumber(Number(balances.usdcRaw) / 1e6, 4)}
               </p>
             </div>
-            <div>
-              <p className="text-xs text-muted">{t("solBalance")}</p>
-              <p className="mt-1 text-2xl font-bold">
+            <div className="rounded-xl border-2 border-black bg-[#f5f3ff] px-4 py-3">
+              <p className="text-[10px] font-bold uppercase tracking-wide text-muted-ink">{t("solBalance")}</p>
+              <p className="display mt-1 text-3xl">
                 {formatNumber(Number(balances.solLamports) / 1e9, 4)}
               </p>
             </div>
           </div>
           <div className="mt-5">
             <p className="label">{t("address")}</p>
-            <div className="flex items-center gap-2 rounded-lg border border-border bg-background p-2">
-              <span className="mono min-w-0 flex-1 truncate text-sm">{wallet.public_key}</span>
+            <div className="flex items-center gap-2 rounded-xl border-2 border-black bg-[#f5f3ff] p-2">
+              <span className="mono min-w-0 flex-1 truncate text-sm font-bold">{wallet.public_key}</span>
               <CopyButton value={wallet.public_key} />
             </div>
-            <p className="mt-2 text-xs text-muted">{t("depositHint")}</p>
+            <p className="mt-2 text-xs text-muted-ink">{t("depositHint")}</p>
+          </div>
           </div>
         </section>
 
-        <section className="card p-5">
-          <h2 className="font-semibold">{t("withdraw")}</h2>
-          <WithdrawCard feeUsdc={withdrawFee.flat_usdc ?? withdrawFee.amount_usdc ?? 0.5} />
+        <section className="card overflow-hidden">
+          <div className="chrome">
+            <span className="chrome-dots"><span /><span /></span>
+            <span className="text-muted-ink">{t("withdraw")}</span>
+          </div>
+          <div className="p-5">
+            <WithdrawCard feeUsdc={withdrawFee.flat_usdc ?? withdrawFee.amount_usdc ?? 0.5} />
+          </div>
         </section>
 
-        <section className="card p-5">
-          <h2 className="font-semibold">{t("swap")}</h2>
-          <SwapCard feePercent={swapFee.percent ?? 0.3} />
+        <section className="card overflow-hidden">
+          <div className="chrome">
+            <span className="chrome-dots"><span /><span /></span>
+            <span className="text-muted-ink">{t("swap")}</span>
+          </div>
+          <div className="p-5">
+            <SwapCard feePercent={swapFee.percent ?? 0.3} />
+          </div>
         </section>
       </div>
 
-      <section className="card h-fit p-5">
-        <h2 className="font-semibold">{t("recentEvents")}</h2>
+      <section className="card h-fit overflow-hidden">
+        <div className="chrome">
+          <span className="chrome-dots"><span /><span /><span /></span>
+          <span className="text-muted-ink">{t("recentEvents")}</span>
+        </div>
+        <div className="p-5">
         {events.length === 0 ? (
-          <p className="mt-3 text-sm text-muted">{t("noEvents")}</p>
+          <p className="mt-2 text-sm text-muted-ink">{t("noEvents")}</p>
         ) : (
-          <ul className="mt-3 flex flex-col divide-y divide-border text-sm">
+          <ul className="mt-2 flex flex-col divide-y divide-black/10 text-sm">
             {events.map((ev) => {
               const raw = Number(ev.amount_raw);
               const isUsdc = !ev.mint || ev.mint === USDC_MINT_LOCAL;
@@ -78,10 +97,10 @@ export default async function WalletPage({ params }: PageProps<"/[locale]/dashbo
               return (
                 <li key={ev.id} className="flex items-center justify-between py-2.5">
                   <div>
-                    <p className="font-medium capitalize">{ev.type.replace(/_/g, " ")}</p>
-                    <p className="text-xs text-muted">{formatDate(ev.confirmed_at)}</p>
+                    <p className="font-bold capitalize">{ev.type.replace(/_/g, " ")}</p>
+                    <p className="text-xs text-muted-ink">{formatDate(ev.confirmed_at)}</p>
                   </div>
-                  <span className={negative ? "text-danger" : "text-accent"}>
+                  <span className={`font-bold ${negative ? "text-[#b91c1c]" : "text-[#15803d]"}`}>
                     {negative ? "−" : "+"}
                     {formatNumber(amount, 4)} {isUsdc ? "USDC" : "SPL"}
                   </span>
@@ -90,6 +109,7 @@ export default async function WalletPage({ params }: PageProps<"/[locale]/dashbo
             })}
           </ul>
         )}
+        </div>
       </section>
     </div>
   );

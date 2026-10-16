@@ -53,35 +53,42 @@ export function AdminPanel() {
     };
   }, []);
 
-  if (error) return <p className="text-sm text-danger">{error}</p>;
-  if (!data) return <p className="text-sm text-muted">Loading…</p>;
+  if (error) return <p className="text-sm font-bold text-[#b91c1c]">{error}</p>;
+  if (!data) return <p className="text-sm font-bold text-white/80">Loading…</p>;
 
   return (
     <div className="grid gap-6 lg:grid-cols-2">
       {/* treasury */}
-      <section className="card p-5">
-        <h2 className="mb-3 font-semibold">{t("treasury")}</h2>
-        <div className="grid grid-cols-2 gap-3 text-sm">
-          <div className="rounded-lg border border-border bg-background p-3">
-            <p className="text-xs text-muted">SOL</p>
-            <p className="text-xl font-bold">{data.treasury.sol.toFixed(4)}</p>
+      <section className="card overflow-hidden">
+        <div className="chrome">
+          <span className="chrome-dots"><span /><span /><span /></span>
+          <span className="text-muted-ink">{t("treasury")}</span>
+        </div>
+        <div className="grid grid-cols-2 gap-3 p-5 text-sm">
+          <div className="rounded-xl border-2 border-black bg-[#f5f3ff] p-3">
+            <p className="text-[10px] font-bold uppercase tracking-wide text-muted-ink">SOL</p>
+            <p className="display mt-1 text-2xl">{data.treasury.sol.toFixed(4)}</p>
           </div>
-          <div className="rounded-lg border border-border bg-background p-3">
-            <p className="text-xs text-muted">USDC</p>
-            <p className="text-xl font-bold">{data.treasury.usdc.toFixed(2)}</p>
+          <div className="rounded-xl border-2 border-black bg-[#f5f3ff] p-3">
+            <p className="text-[10px] font-bold uppercase tracking-wide text-muted-ink">USDC</p>
+            <p className="display mt-1 text-2xl">{data.treasury.usdc.toFixed(2)}</p>
           </div>
         </div>
       </section>
 
       {/* pricing */}
-      <section className="card p-5">
-        <h2 className="mb-3 font-semibold">{t("pricing")}</h2>
+      <section className="card overflow-hidden">
+        <div className="chrome">
+          <span className="chrome-dots"><span /><span /><span /></span>
+          <span className="text-muted-ink">{t("pricing")}</span>
+        </div>
+        <div className="p-5">
         <table className="w-full text-sm">
           <tbody>
             {Object.entries(data.pricing).map(([key, value]) => (
-              <tr key={key} className="border-b border-border/60 last:border-0">
-                <td className="py-2 capitalize">{key.replace(/_/g, " ")}</td>
-                <td className="py-2 text-right font-medium">
+              <tr key={key} className="border-b border-black/10 last:border-0">
+                <td className="py-2 font-semibold capitalize">{key.replace(/_/g, " ")}</td>
+                <td className="py-2 text-right font-bold">
                   {value.flat_usdc != null
                     ? `${value.flat_usdc} USDC flat`
                     : value.percent != null
@@ -92,17 +99,19 @@ export function AdminPanel() {
             ))}
           </tbody>
         </table>
+        </div>
       </section>
 
       {/* jobs */}
-      <section className="card p-5 lg:col-span-2">
-        <h2 className="mb-3 font-semibold">
-          {t("jobs")} <span className="text-xs text-warning">pending: {data.jobs.pending}</span>
-        </h2>
-        <div className="overflow-x-auto">
+      <section className="card overflow-hidden lg:col-span-2">
+        <div className="chrome">
+          <span className="chrome-dots"><span /><span /><span /></span>
+          <span className="text-muted-ink">{t("jobs")} · pending: {data.jobs.pending}</span>
+        </div>
+        <div className="overflow-x-auto p-5">
           <table className="w-full min-w-[520px] text-sm">
             <thead>
-              <tr className="border-b border-border text-left text-xs text-muted">
+              <tr className="border-b-2 border-black text-left">
                 <th className="py-2">ID</th>
                 <th className="py-2">Type</th>
                 <th className="py-2">Status</th>
@@ -112,22 +121,22 @@ export function AdminPanel() {
             </thead>
             <tbody>
               {data.jobs.list.map((j) => (
-                <tr key={j.id} className="border-b border-border/50">
-                  <td className="py-2 mono text-xs">{j.id}</td>
-                  <td className="py-2">{j.type}</td>
+                <tr key={j.id} className="border-b border-black/10">
+                  <td className="mono py-2 text-xs">{j.id}</td>
+                  <td className="py-2 font-semibold">{j.type}</td>
                   <td
-                    className={`py-2 font-medium ${
+                    className={`py-2 font-bold uppercase text-xs tracking-wide ${
                       j.status === "failed"
-                        ? "text-danger"
+                        ? "text-[#b91c1c]"
                         : j.status === "done"
-                          ? "text-accent"
-                          : "text-warning"
+                          ? "text-[#15803d]"
+                          : "text-[#a16207]"
                     }`}
                   >
                     {j.status}
                   </td>
                   <td className="py-2">{j.attempts}</td>
-                  <td className="max-w-64 truncate py-2 text-xs text-muted" title={j.last_error ?? ""}>
+                  <td className="max-w-64 truncate py-2 text-xs text-muted-ink" title={j.last_error ?? ""}>
                     {j.last_error ?? ""}
                   </td>
                 </tr>
@@ -138,12 +147,15 @@ export function AdminPanel() {
       </section>
 
       {/* recent orders */}
-      <section className="card p-5 lg:col-span-2">
-        <h2 className="mb-3 font-semibold">{t("recentOrders")}</h2>
-        <div className="overflow-x-auto">
+      <section className="card overflow-hidden lg:col-span-2">
+        <div className="chrome">
+          <span className="chrome-dots"><span /><span /><span /></span>
+          <span className="text-muted-ink">{t("recentOrders")}</span>
+        </div>
+        <div className="overflow-x-auto p-5">
           <table className="w-full min-w-[520px] text-sm">
             <thead>
-              <tr className="border-b border-border text-left text-xs text-muted">
+              <tr className="border-b-2 border-black text-left">
                 <th className="py-2">Order</th>
                 <th className="py-2">Service</th>
                 <th className="py-2">Amount (raw)</th>
@@ -153,12 +165,12 @@ export function AdminPanel() {
             </thead>
             <tbody>
               {data.orders.map((o) => (
-                <tr key={o.id} className="border-b border-border/50">
-                  <td className="py-2 mono text-xs">{o.id.slice(0, 8)}</td>
-                  <td className="py-2">{o.service?.replace(/_/g, " ")}</td>
-                  <td className="py-2 mono text-xs">{o.amount_raw}</td>
-                  <td className="py-2">{o.status}</td>
-                  <td className="py-2 text-muted">{new Date(o.created_at).toLocaleString()}</td>
+                <tr key={o.id} className="border-b border-black/10">
+                  <td className="mono py-2 text-xs">{o.id.slice(0, 8)}</td>
+                  <td className="py-2 font-semibold">{o.service?.replace(/_/g, " ")}</td>
+                  <td className="mono py-2 text-xs">{o.amount_raw}</td>
+                  <td className="py-2 font-semibold capitalize">{o.status}</td>
+                  <td className="py-2 text-muted-ink">{new Date(o.created_at).toLocaleString()}</td>
                 </tr>
               ))}
             </tbody>

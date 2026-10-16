@@ -1,16 +1,22 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Archivo_Black, Geist, Geist_Mono } from "next/font/google";
 import { NextIntlClientProvider } from "next-intl";
 import { getMessages, setRequestLocale } from "next-intl/server";
 import { notFound } from "next/navigation";
 import { routing } from "@/i18n/routing";
 import { Nav } from "@/components/nav";
 import { Footer } from "@/components/footer";
+import { Ticker } from "@/components/ticker";
 import { SITE } from "@/lib/config";
 import "../globals.css";
 
 const geistSans = Geist({ variable: "--font-geist-sans", subsets: ["latin"] });
 const geistMono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"] });
+const archivoBlack = Archivo_Black({
+  variable: "--font-display",
+  weight: "400",
+  subsets: ["latin"],
+});
 
 export function generateStaticParams() {
   return routing.locales.map((locale) => ({ locale }));
@@ -51,7 +57,10 @@ export default async function LocaleLayout({
   };
 
   return (
-    <html lang={locale} className={`${geistSans.variable} ${geistMono.variable}`}>
+    <html
+      lang={locale}
+      className={`${geistSans.variable} ${geistMono.variable} ${archivoBlack.variable}`}
+    >
       <body className="flex min-h-dvh flex-col">
         <script
           type="application/ld+json"
@@ -59,7 +68,8 @@ export default async function LocaleLayout({
         />
         <NextIntlClientProvider messages={messages}>
           <Nav />
-          <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-8 sm:px-6">
+          <Ticker locale={locale} />
+          <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-10 sm:px-6">
             {children}
           </main>
           <Footer />

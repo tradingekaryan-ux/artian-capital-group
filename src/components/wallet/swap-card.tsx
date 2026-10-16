@@ -37,7 +37,7 @@ export function SwapCard({ feePercent }: { feePercent: number }) {
 
   return (
     <div className="mt-4 flex flex-col gap-3">
-      <p className="text-xs text-muted">
+      <p className="text-xs text-muted-ink">
         Fee in-app: <strong>{feePercent}%</strong> dari hasil swap · Biaya jaringan ditanggung platform
       </p>
       <form onSubmit={submit} className="grid gap-3 sm:grid-cols-3">
@@ -75,8 +75,8 @@ export function SwapCard({ feePercent }: { feePercent: number }) {
           </button>
         </div>
       </form>
-      {message && <p className="text-sm text-accent">{message}</p>}
-      {error && <p className="text-sm text-danger">{error}</p>}
+      {message && <p className="text-sm font-bold text-[#15803d]">{message}</p>}
+      {error && <p className="text-sm font-bold text-[#b91c1c]">{error}</p>}
     </div>
   );
 }

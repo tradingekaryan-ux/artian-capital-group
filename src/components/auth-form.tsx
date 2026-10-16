@@ -50,11 +50,20 @@ export function AuthForm({ mode }: { mode: Mode }) {
 
   return (
     <div className="mx-auto max-w-md">
-      <div className="card p-6 sm:p-8">
-        <h1 className="text-2xl font-bold">
-          {mode === "login" ? t("loginTitle") : t("registerTitle")}
-        </h1>
-        <form onSubmit={submit} className="mt-6 flex flex-col gap-4">
+      <div className="card overflow-hidden">
+        <div className="chrome">
+          <span className="chrome-dots">
+            <span />
+            <span />
+            <span />
+          </span>
+          <span className="text-muted-ink">{mode === "login" ? "login" : "register"}</span>
+        </div>
+        <div className="p-6 sm:p-8">
+          <h1 className="text-3xl">
+            {mode === "login" ? t("loginTitle") : t("registerTitle")}
+          </h1>
+          <form onSubmit={submit} className="mt-6 flex flex-col gap-4">
           {mode === "register" && (
             <div>
               <label className="label" htmlFor="username">
@@ -101,33 +110,34 @@ export function AuthForm({ mode }: { mode: Mode }) {
               autoComplete={mode === "login" ? "current-password" : "new-password"}
             />
           </div>
-          {error && <p className="text-sm text-danger">{error}</p>}
-          <button className="btn btn-primary w-full" disabled={busy}>
+          {error && <p className="text-sm font-bold text-[#b91c1c]">{error}</p>}
+          <button className="btn btn-primary w-full !py-3" disabled={busy}>
             {busy ? "…" : mode === "login" ? t("loginCta") : t("registerCta")}
           </button>
         </form>
-        <p className="mt-4 text-sm text-muted">
+        <p className="mt-4 text-sm text-muted-ink">
           {mode === "login" ? (
             <>
               {t("noAccount")}{" "}
-              <Link href="/register" className="text-accent hover:underline">
+              <Link href="/register" className="font-bold underline decoration-2 underline-offset-2">
                 {t("register")}
               </Link>
             </>
           ) : (
             <>
               {t("haveAccount")}{" "}
-              <Link href="/login" className="text-accent hover:underline">
+              <Link href="/login" className="font-bold underline decoration-2 underline-offset-2">
                 {t("login")}
               </Link>
             </>
           )}
         </p>
         {mode === "register" && (
-          <p className="mt-4 rounded-lg border border-border bg-surface-2 p-3 text-xs text-muted">
+          <p className="mt-4 rounded-xl border-2 border-black bg-[#ede9fe] p-3 text-xs font-medium text-muted-ink">
             {t("walletNotice")}
           </p>
         )}
+        </div>
       </div>
     </div>
   );

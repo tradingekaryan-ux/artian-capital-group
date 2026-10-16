@@ -19,13 +19,13 @@ export default async function ExplorePage({
   return (
     <div className="flex flex-col gap-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-2xl font-bold">{t("title")}</h1>
+        <h1 className="text-3xl sm:text-4xl">{t("title")}</h1>
         <Link href="/create" className="btn btn-primary">
-          +
+          + Create
         </Link>
       </div>
 
-      <form className="flex flex-wrap gap-2" action={`/${locale}/explore`} method="get">
+      <form className="flex flex-wrap gap-3" action={`/${locale}/explore`} method="get">
         <input
           name="q"
           defaultValue={q}
@@ -36,61 +36,61 @@ export default async function ExplorePage({
           <option value="new">{t("sortNew")}</option>
           <option value="top">{t("sortTop")}</option>
         </select>
-        <button className="btn btn-secondary">→</button>
+        <button className="btn btn-dark">→</button>
       </form>
 
       {items.length === 0 ? (
-        <div className="card p-10 text-center text-sm text-muted">
-          {t("empty")}{" "}
-          <Link href="/create" className="text-accent hover:underline">
+        <div className="card p-12 text-center">
+          <p className="text-sm font-semibold text-muted-ink">{t("empty")}</p>
+          <Link href="/create" className="btn btn-primary mt-4 inline-flex">
             {t("sortNew") === "Terbaru" ? "Buat token" : "Create one"}
           </Link>
         </div>
       ) : (
-        <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        <ul className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
           {items.map((item) => (
             <li key={item.mint}>
               <Link
                 href={`/token/${item.mint}`}
-                className="card flex h-full flex-col gap-3 p-4 transition-colors hover:border-accent/50"
+                className="card flex h-full flex-col gap-3 p-4 transition-transform hover:-translate-x-0.5 hover:-translate-y-0.5"
               >
                 <div className="flex items-center gap-3">
                   {item.logo_uri ? (
                     // eslint-disable-next-line @next/next/no-img-element
-                    <img src={item.logo_uri} alt="" className="h-10 w-10 rounded-full object-cover" />
+                    <img src={item.logo_uri} alt="" className="h-12 w-12 rounded-xl border-2 border-black object-cover" />
                   ) : (
-                    <div className="flex h-10 w-10 items-center justify-center rounded-full bg-surface-2 text-xs font-bold">
+                    <div className="display flex h-12 w-12 items-center justify-center rounded-xl border-2 border-black bg-[#ede9fe] text-sm">
                       {item.symbol.slice(0, 3)}
                     </div>
                   )}
                   <div className="min-w-0">
-                    <p className="truncate font-semibold">{item.name}</p>
-                    <p className="text-xs text-muted">${item.symbol}</p>
+                    <p className="truncate font-bold">{item.name}</p>
+                    <p className="text-xs font-bold uppercase text-muted-ink">${item.symbol}</p>
                   </div>
                 </div>
                 <div className="mt-auto grid grid-cols-2 gap-2 text-sm">
-                  <div>
-                    <p className="text-xs text-muted">Price</p>
-                    <p className="font-medium">
+                  <div className="rounded-xl border-2 border-black bg-[#f5f3ff] px-3 py-2">
+                    <p className="text-[10px] font-bold uppercase tracking-wide text-muted-ink">Price</p>
+                    <p className="font-bold">
                       {item.price_usd ? formatUsd(item.price_usd) : "—"}
                     </p>
                   </div>
-                  <div>
-                    <p className="text-xs text-muted">Liquidity</p>
-                    <p className="font-medium">
+                  <div className="rounded-xl border-2 border-black bg-[#f5f3ff] px-3 py-2">
+                    <p className="text-[10px] font-bold uppercase tracking-wide text-muted-ink">Liquidity</p>
+                    <p className="font-bold">
                       {item.liquidity_usd ? `$${formatCompact(item.liquidity_usd)}` : "—"}
                     </p>
                   </div>
                 </div>
-                <div className="flex items-center justify-between text-xs text-muted">
+                <div className="flex items-center justify-between text-xs text-muted-ink">
                   <span className="mono">{shortAddress(item.mint, 4)}</span>
                   <span
                     className={
                       item.change24h === null
                         ? ""
                         : item.change24h >= 0
-                          ? "text-accent"
-                          : "text-danger"
+                          ? "font-bold text-[#15803d]"
+                          : "font-bold text-[#b91c1c]"
                     }
                   >
                     {item.change24h === null

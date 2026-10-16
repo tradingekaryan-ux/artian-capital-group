@@ -29,17 +29,27 @@ export function Nav() {
   }
 
   return (
-    <header className="sticky top-0 z-40 border-b border-border bg-background/85 backdrop-blur">
-      <div className="mx-auto flex h-14 max-w-6xl items-center justify-between gap-4 px-4 sm:px-6">
-        <div className="flex items-center gap-6">
-          <Link href="/" className="font-bold tracking-tight">
-            <span className="gradient-text">Artian</span>
+    <header className="sticky top-0 z-40 border-b-[2.5px] border-black bg-[#0c0c10]">
+      <div className="mx-auto flex h-16 max-w-6xl items-center justify-between gap-4 px-4 sm:px-6">
+        <div className="flex items-center gap-8">
+          <Link href="/" className="display text-xl text-white">
+            Artian<span className="text-[#d8ff3e]">.</span>
           </Link>
-          <nav className="hidden items-center gap-4 text-sm text-muted sm:flex">
-            <Link href="/explore" className="hover:text-foreground">
+          <nav className="hidden items-center gap-1 text-[13px] font-bold uppercase tracking-wide text-white/90 sm:flex">
+            <Link
+              href="/explore"
+              className={`rounded-full border-2 border-transparent px-3 py-1 transition-colors hover:border-[#d8ff3e] hover:text-[#d8ff3e] ${
+                pathname === "/explore" ? "border-[#d8ff3e] text-[#d8ff3e]" : ""
+              }`}
+            >
               {t("explore")}
             </Link>
-            <Link href="/create" className="hover:text-foreground">
+            <Link
+              href="/create"
+              className={`rounded-full border-2 border-transparent px-3 py-1 transition-colors hover:border-[#d8ff3e] hover:text-[#d8ff3e] ${
+                pathname === "/create" ? "border-[#d8ff3e] text-[#d8ff3e]" : ""
+              }`}
+            >
               {t("create")}
             </Link>
           </nav>
@@ -47,25 +57,25 @@ export function Nav() {
         <div className="flex items-center gap-2 text-sm">
           <Link
             href={pathname === "/" ? `/${otherLocale}` : `/${otherLocale}${pathname}`}
-            className="rounded-lg px-2 py-1 text-muted hover:text-foreground"
+            className="rounded-full border-2 border-white/40 px-2.5 py-1 text-xs font-bold uppercase text-white hover:border-[#d8ff3e] hover:text-[#d8ff3e]"
           >
             {otherLocale.toUpperCase()}
           </Link>
           {email ? (
             <>
-              <Link href="/dashboard" className="btn btn-secondary !py-1.5">
+              <Link href="/dashboard" className="btn btn-secondary !py-1.5 !text-[11px]">
                 {t("dashboard")}
               </Link>
-              <button onClick={logout} className="btn btn-primary !py-1.5">
+              <button onClick={logout} className="btn btn-primary !py-1.5 !text-[11px]">
                 {t("logout")}
               </button>
             </>
           ) : (
             <>
-              <Link href="/login" className="btn btn-secondary !py-1.5">
+              <Link href="/login" className="btn btn-secondary !py-1.5 !text-[11px]">
                 {t("login")}
               </Link>
-              <Link href="/register" className="btn btn-primary !py-1.5">
+              <Link href="/register" className="btn btn-primary !py-1.5 !text-[11px]">
                 {t("register")}
               </Link>
             </>

@@ -12,7 +12,7 @@ export default async function AdminPage({ params }: PageProps<"/[locale]/admin">
 
   return (
     <div className="flex flex-col gap-6">
-      <h1 className="text-2xl font-bold">{t("title")}</h1>
+      <h1 className="text-4xl">{t("title")}</h1>
       <AdminPanel />
     </div>
   );

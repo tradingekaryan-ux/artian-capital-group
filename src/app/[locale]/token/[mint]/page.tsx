@@ -109,44 +109,54 @@ export default async function TokenPage({ params }: PageProps<"/[locale]/token/[
         dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
       />
       {/* header */}
-      <section className="card flex flex-wrap items-center gap-4 p-5">
-        {token.logo_uri ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={token.logo_uri} alt="" className="h-14 w-14 rounded-full object-cover" />
-        ) : (
-          <div className="flex h-14 w-14 items-center justify-center rounded-full bg-surface-2 font-bold">
-            {token.symbol.slice(0, 3)}
-          </div>
-        )}
-        <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-baseline gap-2">
-            <h1 className="text-2xl font-bold">{token.name}</h1>
-            <span className="text-muted">${token.symbol}</span>
-          </div>
-          <div className="mt-1 flex flex-wrap items-center gap-3 text-xs text-muted">
-            <span className="mono">{shortAddress(token.mint, 6)}</span>
-            <CopyButton value={token.mint} />
-            <span>
-              by {creator.data?.username ?? "unknown"} · {formatDate(token.created_at)}
-            </span>
-            <a
-              href={`https://explorer.solana.com/address/${token.mint}?cluster=${process.env.NEXT_PUBLIC_SOLANA_CLUSTER ?? "devnet"}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-accent-2 hover:underline"
-            >
-              {t("explorer")}
-            </a>
-          </div>
+      <section className="card overflow-hidden">
+        <div className="chrome">
+          <span className="chrome-dots">
+            <span />
+            <span />
+            <span />
+          </span>
+          <span className="mono text-muted-ink">{shortAddress(token.mint, 6)}</span>
         </div>
-        <div className="flex items-center gap-2">
-          <Sparkline points={snapshots.map((s) => s.price_usd ?? 0)} />
-          <WatchlistButton mint={token.mint} initial={watching?.watching ?? false} />
+        <div className="flex flex-wrap items-center gap-4 p-5">
+          {token.logo_uri ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={token.logo_uri} alt="" className="h-16 w-16 rounded-2xl border-2 border-black object-cover" />
+          ) : (
+            <div className="display flex h-16 w-16 items-center justify-center rounded-2xl border-2 border-black bg-[#ede9fe] text-lg">
+              {token.symbol.slice(0, 3)}
+            </div>
+          )}
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-baseline gap-2">
+              <h1 className="text-3xl">{token.name}</h1>
+              <span className="badge !shadow-none">${token.symbol}</span>
+            </div>
+            <div className="mt-2 flex flex-wrap items-center gap-3 text-xs text-muted-ink">
+              <span className="mono">{shortAddress(token.mint, 6)}</span>
+              <CopyButton value={token.mint} />
+              <span>
+                by {creator.data?.username ?? "unknown"} · {formatDate(token.created_at)}
+              </span>
+              <a
+                href={`https://explorer.solana.com/address/${token.mint}?cluster=${process.env.NEXT_PUBLIC_SOLANA_CLUSTER ?? "devnet"}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="font-bold underline decoration-2 underline-offset-2"
+              >
+                {t("explorer")}
+              </a>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <Sparkline points={snapshots.map((s) => s.price_usd ?? 0)} />
+            <WatchlistButton mint={token.mint} initial={watching?.watching ?? false} />
+          </div>
         </div>
       </section>
 
       {/* stats */}
-      <section className="grid grid-cols-2 gap-3 sm:grid-cols-5">
+      <section className="grid grid-cols-2 gap-4 sm:grid-cols-5">
         <Stat label={t("price")} value={latest?.price_usd ? formatUsd(latest.price_usd) : "—"} />
         <Stat
           label={t("change24h")}
@@ -164,49 +174,59 @@ export default async function TokenPage({ params }: PageProps<"/[locale]/token/[
       <div className="grid gap-6 lg:grid-cols-3">
         {/* chart + info */}
         <div className="flex flex-col gap-6 lg:col-span-2">
-          <section className="card p-5">
-            <h2 className="mb-3 font-semibold">{t("chart")}</h2>
-            <PriceChart points={snapshots} />
+          <section className="card overflow-hidden">
+            <div className="chrome">
+              <span className="chrome-dots"><span /><span /></span>
+              <span className="text-muted-ink">{t("chart")}</span>
+            </div>
+            <div className="p-5">
+              <PriceChart points={snapshots} />
+            </div>
           </section>
 
-          <section className="card p-5">
-            <h2 className="mb-3 font-semibold">About</h2>
-            <p className="whitespace-pre-wrap text-sm text-muted">
-              {token.description || "—"}
-            </p>
-            <div className="mt-4 flex flex-wrap gap-3 text-sm">
-              {Object.entries((token.socials ?? {}) as Record<string, string | null>).map(
-                ([key, url]) =>
-                  url && (
-                    <a
-                      key={key}
-                      href={url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-accent-2 hover:underline"
-                    >
-                      {key}
-                    </a>
-                  ),
-              )}
+          <section className="card overflow-hidden">
+            <div className="chrome">
+              <span className="chrome-dots"><span /><span /></span>
+              <span className="text-muted-ink">About</span>
             </div>
-            <dl className="mt-4 grid grid-cols-2 gap-3 text-sm sm:grid-cols-3">
-              <div>
-                <dt className="text-xs text-muted">{t("supply")}</dt>
-                <dd className="font-semibold">{formatCompact(Number(token.supply))}</dd>
+            <div className="p-5">
+              <p className="whitespace-pre-wrap text-sm text-muted-ink">
+                {token.description || "—"}
+              </p>
+              <div className="mt-4 flex flex-wrap gap-3 text-sm">
+                {Object.entries((token.socials ?? {}) as Record<string, string | null>).map(
+                  ([key, url]) =>
+                    url && (
+                      <a
+                        key={key}
+                        href={url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="badge hover:bg-[#ede9fe]"
+                      >
+                        {key}
+                      </a>
+                    ),
+                )}
               </div>
-              <div>
-                <dt className="text-xs text-muted">Decimals</dt>
-                <dd className="font-semibold">{token.decimals}</dd>
-              </div>
-              <div>
-                <dt className="text-xs text-muted">Authorities</dt>
-                <dd className="font-semibold text-xs">
-                  mint {token.revoke_mint ? "revoked" : "active"} · freeze{" "}
-                  {token.revoke_freeze ? "revoked" : "active"}
-                </dd>
-              </div>
-            </dl>
+              <dl className="mt-4 grid grid-cols-2 gap-3 text-sm sm:grid-cols-3">
+                <div className="rounded-xl border-2 border-black bg-[#f5f3ff] px-3 py-2">
+                  <dt className="text-[10px] font-bold uppercase tracking-wide text-muted-ink">{t("supply")}</dt>
+                  <dd className="font-bold">{formatCompact(Number(token.supply))}</dd>
+                </div>
+                <div className="rounded-xl border-2 border-black bg-[#f5f3ff] px-3 py-2">
+                  <dt className="text-[10px] font-bold uppercase tracking-wide text-muted-ink">Decimals</dt>
+                  <dd className="font-bold">{token.decimals}</dd>
+                </div>
+                <div className="rounded-xl border-2 border-black bg-[#f5f3ff] px-3 py-2">
+                  <dt className="text-[10px] font-bold uppercase tracking-wide text-muted-ink">Authorities</dt>
+                  <dd className="text-xs font-bold">
+                    mint {token.revoke_mint ? "revoked" : "active"} · freeze{" "}
+                    {token.revoke_freeze ? "revoked" : "active"}
+                  </dd>
+                </div>
+              </dl>
+            </div>
           </section>
 
           <CommentsSection
@@ -227,37 +247,42 @@ export default async function TokenPage({ params }: PageProps<"/[locale]/token/[
 
         {/* pool panel */}
         <div className="flex flex-col gap-6">
-          <section className="card p-5">
-            <h2 className="mb-3 font-semibold">{t("poolTitle")}</h2>
-            {poolRow?.status === "active" && poolRow.pool_id ? (
-              <div className="flex flex-col gap-2 text-sm">
-                <InfoRow label="DEX" value="Raydium CPMM" />
-                <InfoRow label="Pair" value={`${token.symbol} / USDC`} />
-                <InfoRow
-                  label={t("liquidity")}
-                  value={
-                    poolRow.quote_amount
-                      ? `$${formatCompact(Number(poolRow.quote_amount) * 2)}`
-                      : "—"
-                  }
-                />
-                <InfoRow
-                  label={t("initialPrice")}
-                  value={poolRow.initial_price ? formatUsd(Number(poolRow.initial_price)) : "—"}
-                />
-                <InfoRow label="Pool" value={shortAddress(poolRow.pool_id, 6)} />
-                <a
-                  href={`https://raydium.io/liquidity/?pool=${poolRow.pool_id}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="mt-2 text-accent-2 hover:underline"
-                >
-                  Buka di Raydium ↗
-                </a>
-              </div>
-            ) : (
-              <p className="text-sm text-muted">{t("noPool")}</p>
-            )}
+          <section className="card overflow-hidden">
+            <div className="chrome">
+              <span className="chrome-dots"><span /><span /></span>
+              <span className="text-muted-ink">{t("poolTitle")}</span>
+            </div>
+            <div className="p-5">
+              {poolRow?.status === "active" && poolRow.pool_id ? (
+                <div className="flex flex-col gap-2 text-sm">
+                  <InfoRow label="DEX" value="Raydium CPMM" />
+                  <InfoRow label="Pair" value={`${token.symbol} / USDC`} />
+                  <InfoRow
+                    label={t("liquidity")}
+                    value={
+                      poolRow.quote_amount
+                        ? `$${formatCompact(Number(poolRow.quote_amount) * 2)}`
+                        : "—"
+                    }
+                  />
+                  <InfoRow
+                    label={t("initialPrice")}
+                    value={poolRow.initial_price ? formatUsd(Number(poolRow.initial_price)) : "—"}
+                  />
+                  <InfoRow label="Pool" value={shortAddress(poolRow.pool_id, 6)} />
+                  <a
+                    href={`https://raydium.io/liquidity/?pool=${poolRow.pool_id}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="mt-2 font-bold underline decoration-2 underline-offset-2"
+                  >
+                    Buka di Raydium ↗
+                  </a>
+                </div>
+              ) : (
+                <p className="text-sm text-muted-ink">{t("noPool")}</p>
+              )}
+            </div>
           </section>
 
           <PoolPanel
@@ -293,24 +318,26 @@ function Stat({
   tone?: "up" | "down";
 }) {
   return (
-    <div className="card px-4 py-3.5">
-      <p className="text-xs text-muted">{label}</p>
-      <p
-        className={`mt-1 text-lg font-bold ${
-          tone === "up" ? "text-accent" : tone === "down" ? "text-danger" : ""
-        }`}
-      >
-        {value}
-      </p>
+    <div className="card overflow-hidden">
+      <div className="px-4 py-3.5">
+        <p className="text-[10px] font-bold uppercase tracking-wide text-muted-ink">{label}</p>
+        <p
+          className={`display mt-1 text-xl ${
+            tone === "up" ? "text-[#15803d]" : tone === "down" ? "text-[#b91c1c]" : ""
+          }`}
+        >
+          {value}
+        </p>
+      </div>
     </div>
   );
 }
 
 function InfoRow({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex items-center justify-between">
-      <span className="text-muted">{label}</span>
-      <span className="mono text-xs">{value}</span>
+    <div className="flex items-center justify-between rounded-lg border-2 border-black/10 px-2 py-1.5">
+      <span className="text-xs font-bold uppercase tracking-wide text-muted-ink">{label}</span>
+      <span className="mono text-xs font-bold">{value}</span>
     </div>
   );
 }

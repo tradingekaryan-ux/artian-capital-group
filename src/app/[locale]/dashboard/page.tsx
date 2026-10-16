@@ -20,12 +20,12 @@ export default async function DashboardPage({ params }: PageProps<"/[locale]/das
     <div className="flex flex-col gap-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold">
+          <h1 className="text-3xl sm:text-4xl">
             {t("welcome")}, {username}
           </h1>
-          <p className="text-sm text-muted">{user.email}</p>
+          <p className="mt-1 text-sm font-semibold text-white/80">{user.email}</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-3">
           <Link href="/create" className="btn btn-primary">
             {t("quickCreate")}
           </Link>
@@ -35,45 +35,51 @@ export default async function DashboardPage({ params }: PageProps<"/[locale]/das
         </div>
       </div>
 
-      <section className="grid gap-4 sm:grid-cols-3">
-        <div className="card p-5">
-          <p className="text-xs text-muted">USDC Balance</p>
-          <p className="mt-1 text-2xl font-bold">{formatNumber(Number(balances.usdcRaw) / 1e6, 4)}</p>
+      <section className="grid gap-5 sm:grid-cols-3">
+        <div className="card overflow-hidden">
+          <div className="px-5 py-4">
+            <p className="text-[10px] font-bold uppercase tracking-wide text-muted-ink">USDC Balance</p>
+            <p className="display mt-1 text-3xl">{formatNumber(Number(balances.usdcRaw) / 1e6, 4)}</p>
+          </div>
         </div>
-        <div className="card p-5">
-          <p className="text-xs text-muted">SOL</p>
-          <p className="mt-1 text-2xl font-bold">{formatNumber(Number(balances.solLamports) / 1e9, 4)}</p>
+        <div className="card overflow-hidden">
+          <div className="px-5 py-4">
+            <p className="text-[10px] font-bold uppercase tracking-wide text-muted-ink">SOL</p>
+            <p className="display mt-1 text-3xl">{formatNumber(Number(balances.solLamports) / 1e9, 4)}</p>
+          </div>
         </div>
-        <div className="card p-5">
-          <p className="text-xs text-muted">Wallet</p>
-          <div className="mt-1 flex items-center gap-2">
-            <span className="mono text-sm">{shortAddress(wallet)}</span>
-            <CopyButton value={wallet} />
+        <div className="card overflow-hidden">
+          <div className="px-5 py-4">
+            <p className="text-[10px] font-bold uppercase tracking-wide text-muted-ink">Wallet</p>
+            <div className="mt-2 flex items-center gap-2">
+              <span className="mono text-sm font-bold">{shortAddress(wallet)}</span>
+              <CopyButton value={wallet} />
+            </div>
           </div>
         </div>
       </section>
 
-      <section className="card p-5">
-        <div className="mb-3 flex items-center justify-between">
-          <h2 className="font-semibold">{t("recentTokens")}</h2>
-          <Link href="/dashboard/tokens" className="text-sm text-accent hover:underline">
-            →
-          </Link>
+      <section className="card overflow-hidden">
+        <div className="chrome">
+          <span className="chrome-dots"><span /><span /><span /></span>
+          <span className="text-muted-ink">{t("recentTokens")}</span>
         </div>
-        {tokens.length === 0 ? (
-          <p className="text-sm text-muted">{t("noTokens")}</p>
-        ) : (
-          <ul className="flex flex-col divide-y divide-border">
-            {tokens.map((tok) => (
-              <li key={tok.mint} className="flex items-center justify-between py-2 text-sm">
-                <Link href={`/token/${tok.mint}`} className="hover:text-accent">
-                  {tok.name} <span className="text-muted">({tok.symbol})</span>
-                </Link>
-                <span className="mono text-xs text-muted">{shortAddress(tok.mint, 6)}</span>
-              </li>
-            ))}
-          </ul>
-        )}
+        <div className="p-5">
+          {tokens.length === 0 ? (
+            <p className="text-sm text-muted-ink">{t("noTokens")}</p>
+          ) : (
+            <ul className="flex flex-col divide-y divide-black/10">
+              {tokens.map((tok) => (
+                <li key={tok.mint} className="flex items-center justify-between py-2.5 text-sm">
+                  <Link href={`/token/${tok.mint}`} className="font-bold hover:underline decoration-2 underline-offset-2">
+                    {tok.name} <span className="font-medium text-muted-ink">({tok.symbol})</span>
+                  </Link>
+                  <span className="mono text-xs text-muted-ink">{shortAddress(tok.mint, 6)}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
       </section>
     </div>
   );

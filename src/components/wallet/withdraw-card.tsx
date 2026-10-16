@@ -66,7 +66,7 @@ export function WithdrawCard({ feeUsdc }: Props) {
 
   return (
     <div className="mt-4 flex flex-col gap-3">
-      <p className="text-xs text-muted">
+      <p className="text-xs text-muted-ink">
         {t("withdrawFee")}: <strong>{feeUsdc} USDC</strong> · Biaya jaringan ditanggung platform
       </p>
       {withdrawalId === null ? (
@@ -108,7 +108,7 @@ export function WithdrawCard({ feeUsdc }: Props) {
         </form>
       ) : (
         <form onSubmit={verifyOtp} className="flex flex-col gap-3">
-          <p className="text-sm text-muted">{t("otpVerify")}</p>
+          <p className="text-sm text-muted-ink">{t("otpVerify")}</p>
           <input
             className="input mono text-center text-lg tracking-[0.4em]"
             inputMode="numeric"
@@ -123,8 +123,8 @@ export function WithdrawCard({ feeUsdc }: Props) {
           </button>
         </form>
       )}
-      {message && <p className="text-sm text-accent">{message}</p>}
-      {error && <p className="text-sm text-danger">{error}</p>}
+      {message && <p className="text-sm font-bold text-[#15803d]">{message}</p>}
+      {error && <p className="text-sm font-bold text-[#b91c1c]">{error}</p>}
     </div>
   );
 }

@@ -1,7 +1,7 @@
 /** Sparkline mini untuk header token (client-safe, murni SVG). */
 export function Sparkline({ points }: { points: number[] }) {
   if (points.length < 2) {
-    return <div className="h-10 w-24 rounded-lg bg-surface-2" />;
+    return <div className="h-10 w-24 rounded-lg border-2 border-black bg-[#ede9fe]" />;
   }
   const w = 96;
   const h = 36;
@@ -16,10 +16,10 @@ export function Sparkline({ points }: { points: number[] }) {
     })
     .join(" ");
   const up = points[points.length - 1] >= points[0];
-  const color = up ? "var(--accent)" : "var(--danger)";
+  const color = up ? "#15803d" : "#b91c1c";
   return (
     <svg width={w} height={h} viewBox={`0 0 ${w} ${h}`} aria-hidden>
-      <polyline points={coords} fill="none" stroke={color} strokeWidth="1.5" />
+      <polyline points={coords} fill="none" stroke={color} strokeWidth="2" />
     </svg>
   );
 }
@@ -34,7 +34,7 @@ export function PriceChart({ points }: { points: SnapshotPoint[] }) {
   const clean = points.filter((p) => p.price_usd !== null);
   if (clean.length < 2) {
     return (
-      <div className="flex h-56 items-center justify-center rounded-lg border border-border bg-background text-sm text-muted">
+      <div className="flex h-56 items-center justify-center rounded-xl border-2 border-black bg-[#f5f3ff] text-sm font-semibold text-muted-ink">
         Belum cukup data chart — data mulai terkumpul setelah pool aktif.
       </div>
     );
@@ -55,7 +55,7 @@ export function PriceChart({ points }: { points: SnapshotPoint[] }) {
     })
     .join(" ");
   const up = prices[prices.length - 1] >= prices[0];
-  const color = up ? "var(--accent)" : "var(--danger)";
+  const color = up ? "#15803d" : "#b91c1c";
   const gridLines = [0, 0.25, 0.5, 0.75, 1];
 
   return (

@@ -42,31 +42,41 @@ export function VerifyForm() {
 
   return (
     <div className="mx-auto max-w-md">
-      <div className="card p-6 sm:p-8">
-        <h1 className="text-2xl font-bold">{t("verifyTitle")}</h1>
-        <p className="mt-2 text-sm text-muted">
-          Cek kotak masuk email — kode 6 digit sudah dikirim.
-        </p>
-        <form onSubmit={submit} className="mt-6 flex flex-col gap-4">
-          <div>
-            <label className="label" htmlFor="otp">
-              {t("otp")}
-            </label>
-            <input
-              id="otp"
-              className="input mono text-center text-lg tracking-[0.4em]"
-              inputMode="numeric"
-              maxLength={6}
-              value={otp}
-              onChange={(e) => setOtp(e.target.value.replace(/\D/g, ""))}
-              required
-            />
-          </div>
-          {error && <p className="text-sm text-danger">{error}</p>}
-          <button className="btn btn-primary w-full" disabled={busy || otp.length !== 6}>
-            {busy ? "…" : t("verifyCta")}
-          </button>
-        </form>
+      <div className="card overflow-hidden">
+        <div className="chrome">
+          <span className="chrome-dots">
+            <span />
+            <span />
+            <span />
+          </span>
+          <span className="text-muted-ink">verify</span>
+        </div>
+        <div className="p-6 sm:p-8">
+          <h1 className="text-3xl">{t("verifyTitle")}</h1>
+          <p className="mt-2 text-sm font-medium text-muted-ink">
+            Cek kotak masuk email — kode 6 digit sudah dikirim.
+          </p>
+          <form onSubmit={submit} className="mt-6 flex flex-col gap-4">
+            <div>
+              <label className="label" htmlFor="otp">
+                {t("otp")}
+              </label>
+              <input
+                id="otp"
+                className="input mono text-center text-lg tracking-[0.4em]"
+                inputMode="numeric"
+                maxLength={6}
+                value={otp}
+                onChange={(e) => setOtp(e.target.value.replace(/\D/g, ""))}
+                required
+              />
+            </div>
+            {error && <p className="text-sm font-bold text-[#b91c1c]">{error}</p>}
+            <button className="btn btn-primary w-full !py-3" disabled={busy || otp.length !== 6}>
+              {busy ? "…" : t("verifyCta")}
+            </button>
+          </form>
+        </div>
       </div>
     </div>
   );

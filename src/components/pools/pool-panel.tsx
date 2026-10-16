@@ -95,15 +95,19 @@ function CreatePoolForm({
   if (orderId) {
     const done = status === "confirmed";
     return (
-      <div className="text-sm text-muted">
+      <div className="text-sm text-muted-ink">
         {done ? "Pool aktif! Memuat ulang…" : `Memproses pembuatan pool… (${status})`}
       </div>
     );
   }
 
   return (
-    <section className="card p-5">
-      <h2 className="mb-3 font-semibold">{t("createPool")}</h2>
+    <section className="card overflow-hidden">
+      <div className="chrome">
+        <span className="chrome-dots"><span /><span /><span /></span>
+        <span className="text-muted-ink">{t("createPool")}</span>
+      </div>
+      <div className="p-5">
       <div className="flex flex-col gap-4 text-sm">
         <div>
           <label className="label" htmlFor="lp-pct">
@@ -117,11 +121,11 @@ function CreatePoolForm({
               max={100}
               value={lpPct}
               onChange={(e) => setLpPct(Number(e.target.value))}
-              className="flex-1 accent-[var(--accent)]"
+              className="flex-1 accent-black"
             />
             <span className="mono w-10 text-right font-bold">{lpPct}%</span>
           </div>
-          <p className="mt-1 text-xs text-muted">
+          <p className="mt-1 text-xs text-muted-ink">
             Pool: <strong>{formatNum(tokenAmount)} {symbol}</strong> · {t("marketPercentage")}:{" "}
             <strong>{marketPct}%</strong>
           </p>
@@ -138,22 +142,23 @@ function CreatePoolForm({
             value={quoteAmount}
             onChange={(e) => setQuoteAmount(e.target.value.replace(/[^\d.]/g, ""))}
           />
-          <p className="mt-1 text-xs text-muted">
+          <p className="mt-1 text-xs text-muted-ink">
             {t("initialPrice")}: <strong>${initialPrice.toExponential(3)}</strong> ·{" "}
             {decimals} decimals
           </p>
         </div>
 
-        <div className="rounded-lg border border-border bg-background p-3 text-xs text-muted">
-          {t("poolFee")}: <strong className="text-foreground">{poolFeeUsdc} USDC</strong> ·{" "}
+        <div className="rounded-xl border-2 border-black bg-[#ede9fe] p-3 text-xs font-medium text-muted-ink">
+          {t("poolFee")}: <strong className="text-ink">{poolFeeUsdc} USDC</strong> ·{" "}
           Biaya jaringan ditanggung platform
         </div>
 
-        {error && <p className="text-sm text-danger">{error}</p>}
+        {error && <p className="text-sm font-bold text-[#b91c1c]">{error}</p>}
 
-        <button className="btn btn-primary" onClick={submit} disabled={busy || Number(quoteAmount) <= 0}>
+        <button className="btn btn-primary !py-3" onClick={submit} disabled={busy || Number(quoteAmount) <= 0}>
           {busy ? "…" : `${t("createPool")} — ${poolFeeUsdc} USDC`}
         </button>
+      </div>
       </div>
     </section>
   );
@@ -207,7 +212,12 @@ function LiquidityForms({ poolId, symbol, decimals, addLiquidityFeeUsdc, poolAdd
   }
 
   return (
-    <section className="card p-5">
+    <section className="card overflow-hidden">
+      <div className="chrome">
+        <span className="chrome-dots"><span /><span /></span>
+        <span className="text-muted-ink">{symbol}</span>
+      </div>
+      <div className="p-5">
       <div className="mb-3 flex gap-2">
         <button
           className={`btn ${mode === "add" ? "btn-primary" : "btn-secondary"} flex-1`}
@@ -239,17 +249,17 @@ function LiquidityForms({ poolId, symbol, decimals, addLiquidityFeeUsdc, poolAdd
         </div>
 
         {mode === "add" && (
-          <p className="text-xs text-muted">
+          <p className="text-xs text-muted-ink">
             {t("poolFee")}: <strong>{addLiquidityFeeUsdc} USDC</strong> ·{" "}
             Biaya jaringan ditanggung platform
           </p>
         )}
 
-        {error && <p className="text-sm text-danger">{error}</p>}
-        {message && <p className="text-sm text-accent">{message}</p>}
+        {error && <p className="text-sm font-bold text-[#b91c1c]">{error}</p>}
+        {message && <p className="text-sm font-bold text-[#15803d]">{message}</p>}
 
         <button
-          className="btn btn-primary"
+          className="btn btn-primary !py-3"
           onClick={submit}
           disabled={busy || !amount || Number(amount) <= 0}
         >
@@ -257,8 +267,9 @@ function LiquidityForms({ poolId, symbol, decimals, addLiquidityFeeUsdc, poolAdd
         </button>
 
         {poolAddress && (
-          <p className="mono truncate text-xs text-muted">pool: {poolAddress}</p>
+          <p className="mono truncate text-xs text-muted-ink">pool: {poolAddress}</p>
         )}
+      </div>
       </div>
     </section>
   );

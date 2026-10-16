@@ -137,33 +137,39 @@ export function CreateTokenWizard({ priceUsdc }: Props) {
     const confirmed = orderStatus === "confirmed";
     const failed = orderStatus === "failed" || orderStatus === "refunded";
     return (
-      <div className="card p-6 text-center">
+      <div className="card overflow-hidden text-center">
+        <div className="chrome">
+          <span className="chrome-dots"><span /><span /><span /></span>
+          <span className="text-muted-ink">order</span>
+        </div>
+        <div className="p-8">
         {confirmed ? (
           <>
-            <p className="text-3xl">✓</p>
-            <h2 className="mt-2 text-xl font-bold">{t("success")}</h2>
+            <p className="display text-5xl text-[#15803d]">✓</p>
+            <h2 className="display mt-2 text-2xl">{t("success")}</h2>
             {resultMint && (
-              <Link href={`/token/${resultMint}`} className="btn btn-primary mt-4 inline-flex">
+              <Link href={`/token/${resultMint}`} className="btn btn-primary mt-5 inline-flex">
                 {t("viewToken")}
               </Link>
             )}
           </>
         ) : failed ? (
           <>
-            <h2 className="text-xl font-bold text-danger">{tc("error")}</h2>
-            <p className="mt-2 text-sm text-muted">
+            <h2 className="display text-2xl text-[#b91c1c]">{tc("error")}</h2>
+            <p className="mt-2 text-sm text-muted-ink">
               Pesanan gagal diproses — dana otomatis direfund ke saldo USDC-mu.
             </p>
           </>
         ) : (
           <>
-            <div className="mx-auto h-8 w-8 animate-spin rounded-full border-2 border-accent border-t-transparent" />
-            <p className="mt-4 text-sm text-muted">{t("processing")}</p>
-            <p className="mt-1 text-xs text-muted mono">
+            <div className="mx-auto h-10 w-10 animate-spin rounded-full border-[3px] border-black border-t-[#d8ff3e]" />
+            <p className="mt-4 text-sm font-semibold text-muted-ink">{t("processing")}</p>
+            <p className="mono mt-1 text-xs text-muted-ink">
               order {orderId.slice(0, 8)} · {orderStatus}
             </p>
           </>
         )}
+        </div>
       </div>
     );
   }
@@ -172,18 +178,23 @@ export function CreateTokenWizard({ priceUsdc }: Props) {
   const insufficient = balance !== null && balance < priceUsdc;
 
   return (
-    <div className="card p-6">
+    <div className="card overflow-hidden">
+      <div className="chrome">
+        <span className="chrome-dots"><span /><span /><span /></span>
+        <span className="text-muted-ink">step {step + 1}/4</span>
+      </div>
+      <div className="p-6">
       {/* progress */}
-      <ol className="mb-6 flex gap-2 text-xs">
+      <ol className="mb-6 flex gap-2 text-[11px] font-bold uppercase tracking-wide">
         {steps.map((label, i) => (
           <li
             key={label}
-            className={`flex-1 rounded-lg border px-2 py-2 text-center ${
+            className={`flex-1 rounded-xl border-2 border-black px-2 py-2 text-center ${
               i === step
-                ? "border-accent bg-surface-2 text-foreground"
+                ? "bg-[#d8ff3e] text-ink shadow-[3px_3px_0_0_#000]"
                 : i < step
-                  ? "border-border bg-surface text-accent"
-                  : "border-border text-muted"
+                  ? "bg-[#ede9fe] text-ink"
+                  : "bg-white text-muted-ink"
             }`}
           >
             {i + 1}. {label}
@@ -310,7 +321,7 @@ export function CreateTokenWizard({ priceUsdc }: Props) {
             checked={state.immutable}
             onChange={(v) => patch({ immutable: v })}
           />
-          <p className="rounded-lg border border-border bg-surface-2 p-3 text-xs text-muted">
+          <p className="rounded-xl border-2 border-black bg-[#ede9fe] p-3 text-xs font-medium text-muted-ink">
             {tc("networkFee")}
           </p>
         </div>
@@ -318,7 +329,7 @@ export function CreateTokenWizard({ priceUsdc }: Props) {
 
       {step === 3 && (
         <div className="flex flex-col gap-4">
-          <dl className="flex flex-col divide-y divide-border rounded-lg border border-border text-sm">
+          <dl className="flex flex-col divide-y divide-black/10 rounded-xl border-2 border-black text-sm">
             <Row label={t("name")} value={state.name || "—"} />
             <Row label={t("symbol")} value={state.symbol || "—"} />
             <Row label={t("supply")} value={state.supply || "—"} />
@@ -328,21 +339,21 @@ export function CreateTokenWizard({ priceUsdc }: Props) {
             <Row label={t("immutable")} value={state.immutable ? "✓" : "✗"} />
             <Row label={t("price")} value={`${priceUsdc} USDC`} />
           </dl>
-          <div className="flex items-center justify-between text-xs text-muted">
+          <div className="flex items-center justify-between text-xs font-semibold text-muted-ink">
             <span>
               {tc("usdcBalance")}:{" "}
-              <strong className={insufficient ? "text-danger" : "text-accent"}>
+              <strong className={insufficient ? "text-[#b91c1c]" : "text-[#15803d]"}>
                 {balance === null ? "…" : balance}
               </strong>
             </span>
             <span>{tc("networkFee")}</span>
           </div>
           {insufficient && (
-            <Link href="/dashboard/wallet" className="text-sm text-warning hover:underline">
+            <Link href="/dashboard/wallet" className="text-sm font-bold underline decoration-2 underline-offset-2">
               {t("insufficient")}
             </Link>
           )}
-          {error && <p className="text-sm text-danger">{error}</p>}
+          {error && <p className="text-sm font-bold text-[#b91c1c]">{error}</p>}
           <button className="btn btn-primary" onClick={submit} disabled={busy || insufficient}>
             {busy ? "…" : t("payCta")}
           </button>
@@ -371,6 +382,7 @@ export function CreateTokenWizard({ priceUsdc }: Props) {
           </button>
         )}
       </div>
+      </div>
     </div>
   );
 }
@@ -378,8 +390,8 @@ export function CreateTokenWizard({ priceUsdc }: Props) {
 function Row({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex items-center justify-between px-4 py-2.5">
-      <dt className="text-muted">{label}</dt>
-      <dd className="font-medium">{value}</dd>
+      <dt className="text-xs font-bold uppercase tracking-wide text-muted-ink">{label}</dt>
+      <dd className="font-bold">{value}</dd>
     </div>
   );
 }
@@ -411,12 +423,12 @@ function Checkbox({
   onChange: (v: boolean) => void;
 }) {
   return (
-    <label className="flex cursor-pointer items-center gap-3 rounded-lg border border-border bg-background p-3 text-sm">
+    <label className="flex cursor-pointer items-center gap-3 rounded-xl border-2 border-black bg-[#f5f3ff] p-3 text-sm font-semibold shadow-[3px_3px_0_0_#000]">
       <input
         type="checkbox"
         checked={checked}
         onChange={(e) => onChange(e.target.checked)}
-        className="h-4 w-4 accent-[var(--accent)]"
+        className="h-4 w-4 accent-black"
       />
       {label}
     </label>
