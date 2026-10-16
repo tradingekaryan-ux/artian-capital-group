@@ -10,7 +10,7 @@ import { enqueue } from "@/lib/jobs/queue";
 import { SOL_MINT, LAMPORTS_PER_SOL, LIMITS } from "@/lib/config";
 
 const bodySchema = z.object({
-  asset: z.string().min(32).max(64), // "SOL" atau mint address
+  asset: z.union([z.literal("SOL"), z.string().min(32).max(64)]), // "SOL" atau mint address
   amount: z.number().positive(),
 });
 

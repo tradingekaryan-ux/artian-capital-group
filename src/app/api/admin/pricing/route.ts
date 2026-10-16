@@ -28,6 +28,9 @@ export async function PATCH(req: Request) {
   }
   const parsed = bodySchema.safeParse(json);
   if (!parsed.success) return NextResponse.json({ error: "Validasi gagal" }, { status: 400 });
+  if (Object.keys(parsed.data.value).length === 0) {
+    return NextResponse.json({ error: "Value tidak boleh kosong" }, { status: 400 });
+  }
 
   const { error } = await supabaseAdmin()
     .from("pricing_config")
