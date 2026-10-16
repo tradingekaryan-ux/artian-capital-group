@@ -12,6 +12,7 @@
     "worker": "tsx src/worker/run-jobs.ts",
     "preview": "opennextjs-cloudflare build && opennextjs-cloudflare preview",
     "deploy": "opennextjs-cloudflare build && opennextjs-cloudflare deploy",
+    "deploy:cf": "node scripts/cf-deploy.mjs",
     "upload": "opennextjs-cloudflare build && opennextjs-cloudflare upload",
     "cf-typegen": "wrangler types --env-interface CloudflareEnv cloudflare-env.d.ts",
     "db:types": "echo 'supabase gen types --local > src/lib/db/types.ts (manual)'"

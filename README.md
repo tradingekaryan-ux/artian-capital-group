@@ -6,7 +6,8 @@
 > SEO: `robots.txt`, `sitemap.xml` (static + token live), JSON-LD `WebSite` + `WebPage`+harga.
 > GitHub: repo private **`tradingekaryan-ux/artian-capital-group`** — 2 commit terpush, CI hijau ×2, 7 actions secrets terpasang, **Job Worker terverifikasi jalan end-to-end** (dispatch manual sukses).
 > Adapter Cloudflare terpasang (`@opennextjs/cloudflare` + `wrangler.jsonc` + scripts `deploy`/`preview`) — build adapter lokal sukses (worker.js + aset 43MB).
-> Langkah berikutnya: ① **Cloudflare API Token** dari dashboard (User → API Tokens → template *Edit Cloudflare Workers*) → `npm run deploy` → set secrets worker + `NEXT_PUBLIC_SITE_URL` → smoke live, ② isi `HELIUS_API_KEY` + airdrop devnet ke treasury `4XSuNGXFqH2sSMteAxHWjF1y3Pgf5aCdBT29Ve2MUWSg` → smoke on-chain, ③ (opsional) rotate kredensial yang pernah lewat chat.
+> **LIVE di produksi:** <https://artian-capital-group.trading-ekaryan.workers.dev> (Workers via `npm run deploy:cf`; secrets runtime terpasang; smoke login/dashboard/explore/token/admin lulus; sitemap/robots/JSON-LD memakai URL produksi).
+> Langkah berikutnya: ① **Helius API Key** (dashboard Helius → ikon key di top bar → salin) → isi `HELIUS_API_KEY` → rebuild + redeploy + secret GH, ② **airdrop devnet** ke treasury `4XSuNGXFqH2sSMteAxHWjF1y3Pgf5aCdBT29Ve2MUWSg` via <https://faucet.solana.com> → smoke on-chain, ③ (opsional) rotate kredensial yang pernah lewat chat.
 
 Komunitas financial market + launcher token Solana dengan liquidity pool, on-ramp USDC (topup/withdraw dari wallet eksternal), swap in-app, dan pembayaran fee pakai USDC — **tanpa biaya infrastruktur bulanan** (Supabase Free + Helius free + Cloudflare Pages + GitHub Actions cron).
 
