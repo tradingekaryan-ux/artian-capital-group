@@ -1,0 +1,283 @@
+# Implementation Plan — Artian Capital Group
+
+| | |
+|---|---|
+| **Versi** | 1.1 |
+| **Tanggal** | 16 Oktober 2026 |
+| **Status** | Kode Fase F0–F6 selesai — `lint + typecheck + test + build` hijau; exit on-chain/devnet & deploy menyusul |
+| **Dokumen saudara** | `docs/PRD.md` (lihat §13 status & deviasi) |
+| **Estimasi total** | 8–10 minggu (1 developer full-time) |
+| **Biaya infrastruktur** | $0/bulan |
+
+---
+
+## 1. Tech Stack & Alasan
+
+| Layer | Pilihan | Alasan | Alternatif yang ditolak |
+|---|---|---|---|
+| Framework | **Next.js 16.4 (App Router, Turbopack, React 19) + TypeScript** | SSR untuk SEO halaman token, API route terintegrasi; typecheck = `next typegen && tsc` (tipe route global `PageProps`/`RouteContext` butuh typegen) | Vite+Express (SEO susah), SvelteKit (ekosistem Solana lebih tipis); Next 15 (ketinggalan, konvensi berubah) |
+| UI | **Tailwind CSS v4** (CSS-first via `@tailwindcss/turbopack`, tanpa `tailwind.config.ts`) + komponen sendiri | Cepat, tanpa runtime berat, konsisten | MUI (bundle besar) |
+| i18n | **next-intl** | Rute ber-prefix `/id`, server-first, ringan | react-i18next (client-heavy) |
+| Hosting | **Cloudflare Pages + Workers (via `@opennextjs/cloudflare`)** | Tier gratis, **boleh dipakai komersial**, CDN global, WebSocket/polling cukup | **Vercel Hobby — ditolak: ToS melarang pemakaian komersial**; Netlify (boleh, tapi Cloudflare lebih murah di egress) |
+| Database + Auth + Storage | **Supabase Free** (Postgres, Auth, Storage, RLS) | Semua kebutuhan inti dalam 1 layanan gratis: 500MB DB, 50k MAU, 1GB storage, 500k edge fn | Neon+Clerk (dua vendor), Firebase (vendor lock-in kuat) |
+| RPC Solana | **Helius Free** (10 RPS, 1M credit/bln) + fallback `api.mainnet-beta.solana.com` | DAS API & priority fee tersedia gratis | RPC publik saja (gampang kena 429) |
+| Token creation | **Metaplex umi** (`umi-bundle-defaults` + `mpl-token-metadata`) di atas `@solana/web3.js` + `@solana/spl-token` | Satu alur `createV1` (mint+metadata) + instruksi SPL; payer treasury, authority → wallet user | Instruksi legacy manual (kode lebih panjang, rawan salah urutan); Token-2022 metadata extension (kompatibilitas wallet/DEX lebih berisiko) |
+| Liquidity pool | **Raydium SDK v2 (CPMM)** | Dokumentasi lengkap, permissionless, dukungan Token-2022, biaya pembuatan pool ~0.2 SOL | AMM v4 (butuh OpenBook market, lebih mahal); **spike F4** membandingkan Meteora DAMM v2 & Orca untuk biaya termurah |
+| Swap | **Jupiter Aggregator API** (free key) | Rute terbaik, endpoint `/swap` siap pakai, gratis | Orca/Raydium swap langsung (rute terbatas) |
+| Market data | **DexScreener API + Jupiter Price API** + snapshot internal | Gratis, tanpa kartu kredit | Birdeye (butuh API key berbayar untuk kuota besar) |
+| Job queue & cron | **GitHub Actions** (`worker.yml` cron per menit → `npx tsx src/worker/run-jobs.ts`) + tabel `jobs` + trigger cadangan `POST /api/cron/run-jobs` | 100% gratis, tahan lama untuk tx on-chain, tidak terikat durasi serverless; cron per menit juga jadi heartbeat DB | Vercel Cron (Hobby maks 1×/hari), BullMQ (butuh Redis berbayar), Cloudflare Cron (kuota lebih kecil) |
+| Metadata & logo | **Supabase Storage** | Gratis & tanpa kartu | Arweave (berbayar ~$0.01–0.10/file) → opsi upgrade F7 |
+| Secrets | Environment Cloudflare Workers / Supabase Edge secrets | Tidak pernah di repo | .env di server (di hosting serverless tidak ada) |
+
+### 1.1 Aturan tier gratis (dipatuhi agar $0/bulan)
+1. Cloudflare (boleh komersial) sebagai hosting — **bukan** Vercel Hobby.
+2. Supabase Free tetap hangat via **cron heartbeat ≥ 1×/jam** (hindari pause 7 hari).
+3. Trigger upgrade (dari revenue, bukan modal): Supabase Pro $25/bln saat > 1.000 user aktif/bulan atau > 400MB DB; Helius Developer $49/bln saat RPC error > 2% harian.
+
+---
+
+## 2. Arsitektur Sistem
+
+```
+                         ┌──────────────────────────────────────────┐
+  Browser (EN/ID)  ───▶  │  Next.js on Cloudflare Pages/Workers     │
+                         │  - SSR/ISR pages  - Route handlers (API) │
+                         └───────┬──────────────────────┬───────────┘
+                                 │                      │
+                    ┌────────────▼─────────┐   ┌────────▼────────────┐
+                    │ Supabase Postgres    │   │ Solana RPC (Helius) │
+                    │ + Auth + Storage     │   │ + fallback publik   │
+                    │ RLS per user         │   └────────┬────────────┘
+                    └────────────▲─────────┘            │
+                                 │            ┌──────────▼───────────┐
+                    ┌────────────┴─────────┐  │ Treasury hot wallet  │
+                    │ GitHub Actions Worker│─▶│ (payer semua gas)    │
+                    │ - job queue runner   │  │ + wallet user (kust.)│
+                    │ - price snapshot     │  └──────────────────────┘
+                    │ - indexer heartbeat  │  │ Jupiter / Raydium /  │
+                    └──────────────────────┘  │ DexScreener API      │
+                                              └──────────────────────┘
+```
+
+**Prinsip eksekusi:** request user **tidak pernah menunggu on-chain**. Request hanya menulis baris `jobs` → worker GitHub Actions mengambil job, membangun & mengirim transaksi, memperbarui status → UI membaca status via polling ringan (maks 5 detik).
+
+### 2.1 Alur penting
+1. **Registrasi** → Supabase Auth (OTP email) → saat first-login, `ensureProfile`/`ensureWallet` (`src/lib/profiles.ts`) membuat `profiles` + `wallets` (keypair baru, dienkripsi) dari aplikasi — sengaja **tanpa trigger DB** `handle_new_user` agar seluruh bootstrap bisa diuji/di-debug di satu lapisan code.
+2. **Topup** → user kirim USDC ke ATA miliknya → indexer menangkap mutasi → `wallet_events` + `balances_cache`.
+3. **Order create token** → API cek saldo → transfer USDC user→treasury (tx #1, `awaiting_payment→paid`) → job `create_token` → worker: upload metadata → bangun tx (mint+metadata+ATA+supply, payer=treasury) → kirim → `confirmed` → row `tokens` + halaman `/token/{mint}`.
+4. **LP** → order `create_pool` (tx bayar fee) → job → worker Raydium `cpmm.createPool` → LP token ke wallet user → row `pools`.
+5. **Withdrawal** → OTP → job → tx transfer USDC dari wallet user ke tujuan (fee payer treasury) → `confirmed`.
+
+### 2.2 Keamanan signing service
+- Master key enkripsi (`WALLET_MASTER_KEY`, 32 byte base64) hanya di secrets runtime.
+- Dekripsi dilakukan **sesingkat mungkin** di memori (decode → tanda tangan → buang), tidak pernah di-log/di-cache.
+- Treasury key (`TREASURY_SECRET_KEY`) terpisah dari key user; disimpan terenkripsi dengan master key yang sama, diarahkan lewat env.
+- Setiap pemakaian dicatat `audit_logs` (aksi, target, tx signature, IP).
+
+---
+
+## 3. Struktur Repository
+
+```
+artian-capital/
+├── docs/                        # PRD.md, IMPLEMENTATION_PLAN.md
+├── .github/workflows/
+│   ├── ci.yml                   # lint + test + typecheck + build (Node 22)
+│   └── worker.yml               # cron 1 menit: run-jobs (job on-chain + job siklis)
+├── supabase/
+│   ├── migrations/              # 0001_init.sql (skema + RLS), 0002_storage.sql
+│   └── seed.sql
+├── src/
+│   ├── app/
+│   │   ├── page.tsx             # redirect → /en
+│   │   ├── [locale]/            # en (default) & id
+│   │   │   ├── page.tsx         # landing (statistik DB)
+│   │   │   ├── explore/  create/  token/[mint]/
+│   │   │   ├── login/  register/  verify/
+│   │   │   ├── dashboard/       # overview, wallet, orders, tokens (layout: ensureProfile+ensureWallet)
+│   │   │   └── admin/
+│   │   └── api/
+│   │       ├── orders/          # POST buat order, GET [id] (polling)
+│   │       ├── wallet/          # balance, swap, withdraw, withdraw/verify
+│   │       ├── community/       # comments, watchlist
+│   │       ├── admin/           # overview, pricing
+│   │       └── cron/run-jobs    # trigger manual (Bearer CRON_SECRET)
+│   ├── components/              # nav, footer, auth-form, verify-form, create/wizard,
+│   │                            # market/ (chart, watchlist-button), pools/pool-panel,
+│   │                            # wallet/ (withdraw-card, swap-card), community/, admin/panel
+│   ├── i18n/                    # routing, request, navigation (next-intl v4)
+│   ├── lib/
+│   │   ├── chain/               # token-create (umi), pool (Raydium CPMM), swap (Jupiter), usdc, assets
+│   │   ├── payment/             # pricing, orders (state machine + idempotency + pay/refund)
+│   │   ├── jobs/                # queue (claim, retry 3× backoff 30s), runner (handler on-chain)
+│   │   ├── solana/  db/  security/  market/
+│   │   ├── profiles.ts  admin.ts  analytics.ts  format.ts  config.ts
+│   ├── worker/run-jobs.ts       # entry GitHub Actions: claim job + enqueue job siklis
+├── messages/{en,id}.json
+├── next.config.ts               # plugin next-intl + aturan Tailwind v4
+├── README.md  .env.example
+└── package.json                 # lint / test / typecheck / build / worker
+```
+
+---
+
+## 4. Skema Database (ringkas)
+
+```sql
+-- inti akun & wallet (bootstrap via ensureProfile/ensureWallet, tanpa trigger DB)
+profiles(user_id uuid pk→auth.users, username unique, display_name, bio, role text default 'user',
+         is_suspended bool default false, created_at)
+wallets(user_id pk→profiles, public_key text unique, enc_secret_key text, iv text, auth_tag text, created_at)
+wallet_events(id bigserial, user_id, type text check in (deposit,payment,withdrawal,swap,refund,lp),
+              mint text, amount_raw numeric, signature text, meta jsonb, confirmed_at timestamptz,
+              unique(user_id, signature, type, mint))
+balances_cache(user_id pk, usdc_raw numeric, sol_lamports bigint, refreshed_at)
+
+-- order & layanan
+orders(id uuid pk, user_id, service text check in (create_token,create_pool,add_liquidity,
+       remove_liquidity,withdraw,swap), amount_raw bigint, status text check in (awaiting_payment,paid,
+       processing,confirmed,failed,refunded,cancelled), pricing jsonb, config jsonb,
+       payment_signature text unique, idempotency_key text unique, tx_signature text,
+       error text, created_at, updated_at)
+tokens(id uuid pk, user_id, mint unique, order_id→orders, name, symbol, decimals int, supply numeric,
+       logo_uri, metadata_uri, description, socials jsonb,
+       revoke_mint bool, revoke_freeze bool, immutable bool,
+       status text check in (pending,live,failed), created_tx text, created_at)
+pools(id uuid pk, user_id, token_id→tokens, dex default 'raydium_cpmm', pool_id unique, quote_mint,
+      fee_tier numeric default 0.25, initial_price numeric, lp_percentage numeric, lp_raw numeric,
+      token_amount numeric, quote_amount numeric, status check in (pending,active,failed), created_tx, created_at)
+pool_positions(id, user_id, pool_id, lp_raw, deposited_token, deposited_quote, updated_at,
+               unique(user_id, pool_id))
+
+-- pasar & komunitas
+price_snapshots(mint, ts, price_usd, liquidity_usd, volume_24h_usd, fdv_usd, pk(mint,ts))
+watchlists(user_id, mint, pk(user_id,mint))
+comments(id, user_id, mint, body, status(active|hidden), created_at)
+withdrawals(id uuid, user_id, amount_raw, destination, status(pending|processing|confirmed|failed),
+            otp_hash, otp_expires_at, tx_signature, error, created_at)
+audit_logs(id, actor, action, target, payload jsonb, ip, created_at)
+pricing_config(key pk, value jsonb, updated_by, updated_at)
+jobs(id bigserial, type, payload jsonb, status, attempts int default 0, run_at, last_error, created_at)
+```
+
+**RLS wajib:** semua tabel user-scoped memakai policy `auth.uid() = user_id`; tabel publik (`tokens`, `price_snapshots`, `comments`) dibaca publik, tulis hanya lewat service role (server) — bukan anon key.
+
+---
+
+## 5. Permukaan API (Route Handlers — aktual)
+
+| Method & path | Fungsi | Auth |
+|---|---|---|
+| `POST /api/orders` | buat order: union zod (`create_token`, `create_pool`, `add_liquidity`, `remove_liquidity`, `withdraw`, `swap`) + idempotency key + authorizeConfig | session |
+| `GET /api/orders/[id]` | status order (polling UI; embed `mint` token bila sudah ada) | session |
+| `GET /api/wallet/balance` | saldo USDC/SOL on-chain (baca RPC) | session |
+| `POST /api/wallet/withdraw` | ajukan withdrawal + kirim OTP email | session + rate limit |
+| `POST /api/wallet/withdraw/verify` | verifikasi OTP → eksekusi job withdrawal | session + rate limit |
+| `POST /api/wallet/swap` | quote & execute swap Jupiter → USDC (fee platform dipotong post-swap) | session |
+| `POST/GET /api/community/comments` · `DELETE` | komentar (buat/publik-baca; hapus milik sendiri) | session / publik |
+| `GET/POST /api/community/watchlist` | toggle watchlist per user | session |
+| `GET /api/admin/overview` | stats orders/jobs/treasury untuk panel admin | role admin |
+| `PATCH /api/admin/pricing` | ubah `pricing_config` | role admin |
+| `POST /api/cron/run-jobs` | trigger manual worker (cadangan di luar GH Actions) | `Bearer CRON_SECRET` |
+
+**Catatan penting vs rencana awal:**
+- Autentikasi 100% via **Supabase Auth SDK di client** (login/register/verify) — tidak ada route `/api/auth/*`.
+- Data token & market diambil **server component + lib** (`lib/market`, query Supabase) — tidak ada `/api/tokens`, `/api/pools`, `/api/market/*` terpisah.
+- `/api/webhooks/payment` (gateway) & `/api/jobs/webhook-indexer` (Helius) = opsional, **belum diimplementasikan** — deteksi topup memakai pembacaan saldo/konfirmasi tx via RPC.
+
+---
+
+## 6. Roadmap 7 Fase
+
+> Semua fase menghasilkan kode yang lolos `lint + typecheck + build`. Fase F1–F5 diuji di **devnet** terlebih dahulu (flag `SOLANA_CLUSTER=devnet`), mainnet setelah spike biaya.
+>
+> **Status aktual (16 Okt 2026):** kode F0–F6 sudah diimplementasikan dan CI hijau (`lint` · `test` 10 kasus · `typecheck` · `build`). Exit criteria yang menuntut infrastruktur nyata — devnet on-chain (F1, F2, F4, F5), spike pembanding DEX (F4), dan deploy — **belum dijalankan**. Urutan sisa: buat project Supabase → isi `.env` + secrets → migrasi SQL → smoke devnet → spike F4 → deploy Cloudflare Pages. Daftar gap per fitur ada di `docs/PRD.md` §13.
+
+### Fase 0 — Fondasi (minggu 1)
+- Repo, ESLint/Prettier, Tailwind, next-intl (`en`/`id`), design system dasar (button, input, card, badge, modal).
+- Supabase: migrasi awal (profiles, wallets, RLS, trigger `handle_new_user`).
+- Landing page + layout + nav/footer + halaman auth (login/register/OTP).
+- CI GitHub Actions (`lint`, `typecheck`, `build`).
+- **Exit:** `npm run build` sukses, register→login berjalan, wallet row + keypair tercipta otomatis.
+
+### Fase 1 — Wallet kustodial & Topup (minggu 1–2)
+- Modul `lib/solana/keypair` (generate, encrypt/decrypt AES-256-GCM).
+- Halaman Wallet: alamat, QR, saldo USDC/SOL, riwayat event.
+- Indexer deposit: job cron baca `getTokenAccountsByMint`/signatures → `wallet_events` + `balances_cache`.
+- Rate limit & audit log dasar.
+- **Exit:** kirim USDC devnet dari wallet eksternal → saldo tampil ≤ 60 detik.
+
+### Fase 2 — Create token end-to-end (minggu 2–4)
+- Wizard create token (validasi, upload logo, ringkasan harga).
+- Order & state machine + pembayaran on-chain USDC → treasury + auto-refund saat gagal.
+- `lib/chain/token-create`: build tx (create mint, create metadata, create ATA, mint supply, opsi revoke/immutable), kirim, konfirmasi, retry.
+- Job runner GitHub Actions (`worker/run-jobs`), status polling UI, halaman riwayat order.
+- **Exit (devnet):** order sukses → mint address aktif → supply 100% di wallet user → row `tokens` terisi.
+
+### Fase 3 — Token profile & market data (minggu 4–5)
+- Halaman `/token/{mint}` publik: identitas, statistik, chart (snapshot internal), supply, link explorer, JSON-LD, sitemap.
+- Klien DexScreener + Jupiter Price (cache 15 detik) & snapshot tiap 1 menit.
+- Explore: list, search, sort (baru/teratas), pagination.
+- **Exit:** token uji tampil di explore + halaman profil dengan harga & chart.
+
+### Fase 4 — Liquidity pool (minggu 5–7)
+- **Spike (1 hari):** buat pool di devnet lewat Raydium CPMM vs Meteora DAMM v2 vs Orca → catat biaya riil → pilih pemenang (default tetap CPMM).
+- Form atur **X% supply → pool / (100−X)% → market**: harga awal, pair (USDC/SOL), fee tier, preview.
+- Order create pool → job → `cpmm.createPool` → LP token ke wallet user.
+- Tambah & kuras likuiditas + statistik pool di halaman token.
+- **Exit:** pool terbentuk, swap luar bisa (via Jupiter testnet/devnet), kuras mengembalikan aset sesuai rasio.
+
+### Fase 5 — Swap in-app & Withdrawal (minggu 7–8)
+- Jupiter `/quote`+`/swap`, server-sign, output USDC ke saldo (fee platform 0.30% dihitung server).
+- Withdrawal USDC: validasi alamat, OTP email, batas harian, tx on-chain, status, audit log.
+- Treasury: auto-swap USDC→SOL saat float < 0.3 SOL + alert (log) — dijalankan cron.
+- **Exit:** SOL/token → USDC → withdraw ke wallet eksternal sukses; saldo konsisten.
+
+### Fase 6 — Komunitas, admin, hardening (minggu 8–10)
+- Watchlist, komentar + moderasi, profil publik user, statistik landing.
+- Admin panel: order (retry/refund manual), pricing config, treasury monitor, moderasi, audit log.
+- Hardening: rate limit menyeluruh, CSP & headers, input validation (zod), error boundary, empty/loading state, `npm audit`.
+- SEO: sitemap lengkap, OG image per token, metadata ID/EN; a11y pass.
+- **Exit:** checklist QA Fase 6 lulus; siap deploy production.
+
+---
+
+## 7. Strategi Testing
+| Tipe | Alat | Cakupan |
+|---|---|---|
+| Unit ✅ | Vitest | pricing calculator (create_token/pool/add/remove/withdraw + swap fee) & format (raw USDC/angka) — **10 kasus, hijau** |
+| Unit (tertunda) | Vitest | enkripsi AES-GCM, state machine order, validasi input |
+| Integration (tertunda) | Vitest + mock RPC | token-create tx builder (assert instruksi), withdrawal flow |
+| E2E manual (tertunda) | `scripts/devnet-smoke.ts` | topup→create token→pool→swap→withdraw di devnet |
+| CI ✅ | GitHub Actions `ci.yml` | `lint`, `test`, `typecheck` (`next typegen && tsc`), `build` tiap push/PR — Node 22 |
+| Post-deploy | worker cron tiap menit | sentuh DB tiap menit (de facto heartbeat, PRD §10 R5) + jalankan job siklis `price_snapshot`, `treasury_rebalance` |
+
+Definisi selesai per fase: **CI hijau + exit criteria fase terpenuhi** (exit on-chain/devnet masih tertunda — lihat blok status §6).
+
+---
+
+## 8. Deployment & Konfigurasi
+1. `supabase` project baru (free) → jalankan `supabase/migrations/*.sql` (atau via SQL editor) → salin URL + anon key + service role key.
+2. Cloudflare Pages → connect repo → build OpenNext (`open-next.config.ts`/`wrangler.toml` **menyusul** saat setup deploy pertama) → set env/secrets: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `WALLET_MASTER_KEY` (32 byte base64), `TREASURY_SECRET_KEY` (base58), `CRON_SECRET`, `HELIUS_API_KEY` (opsional), `JUPITER_API_KEY` (opsional), `NEXT_PUBLIC_SOLANA_CLUSTER`.
+3. GitHub Actions secrets: sama dengan poin 2 (lihat daftar di `.github/workflows/worker.yml` — worker dijalankan `npx tsx src/worker/run-jobs.ts` tiap menit).
+4. Custom domain (opsional) atau `*.pages.dev`.
+5. Checklist production: RLS aktif (cek `supabase_get_advisors`), CSP & security headers, rate limit, backup DB (pg_dump mingguan via cron), monitoring saldo treasury, smoke devnet → mainnet.
+
+---
+
+## 9. Tabel Biaya Operasional
+| Item | Biaya platform | Ditalangi user via |
+|---|---|---|
+| Hosting, DB, auth, storage, RPC, data pasar, job runner | **$0** | — |
+| Gas on-chain semua transaksi | dari treasury (USDC) | harga layanan (buffer 15%) |
+| Metadata permanen (Arweave) — opsional F7 | ~$0.01–0.10/token | biaya create token |
+
+---
+
+## 10. Risk Register (ringkas — detail di PRD §10)
+R1 kebocoran key · R2 gas habis · R3 breaking change DEX · R4 rate limit API · R5 Supabase pause · R6 ToS hosting · R7 regulasi · R8 spam · R9 kegagalan on-chain pasca bayar · R10 metadata tidak permanen.
+
+---
+
+## 11. Fase Pasca-MVP (F7+, tidak dikerjakan sekarang)
+Upgrade metadata Arweave · holder stats & top wallets · fiat on-ramp (QRIS dsb., setelah tinjauan ToS) · export private key (dengan keamanan tambahan) · CLMM/full-range pools · forum komunitas · multi-chain · mobile app.

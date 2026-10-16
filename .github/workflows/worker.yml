@@ -1,0 +1,35 @@
+name: Job Worker
+
+# Menjalankan job queue (pembuatan token, pool, withdrawal, dsb.) tiap menit.
+# Butuh repository secrets:
+#   SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, WALLET_MASTER_KEY,
+#   TREASURY_SECRET_KEY, NEXT_PUBLIC_RPC_URL (opsional), HELIUS_API_KEY (opsional)
+
+on:
+  schedule:
+    - cron: "* * * * *"
+  workflow_dispatch:
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+      WALLET_MASTER_KEY: ${{ secrets.WALLET_MASTER_KEY }}
+      TREASURY_SECRET_KEY: ${{ secrets.TREASURY_SECRET_KEY }}
+      HELIUS_API_KEY: ${{ secrets.HELIUS_API_KEY }}
+      NEXT_PUBLIC_RPC_URL: ${{ secrets.NEXT_PUBLIC_RPC_URL }}
+      NEXT_PUBLIC_SOLANA_CLUSTER: ${{ secrets.SOLANA_CLUSTER || 'devnet' }}
+      JUPITER_API_KEY: ${{ secrets.JUPITER_API_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci --legacy-peer-deps
+      - run: npx tsx src/worker/run-jobs.ts

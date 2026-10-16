@@ -1,36 +1,66 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Artian Capital Group
 
-## Getting Started
+> **Status pembangunan (16 Okt 2026):** kode lengkap, `lint/typecheck/test/build` hijau (38 halaman).
+> Database Supabase **`vysgkjqbmgbbowsxafok`** sudah hidup: `apply_all.sql` (0001_init + 0002_storage + seed pricing) lewat MCP `apply_migration`; RLS advisors bersih; bucket `token-assets` aktif.
+> Smoke test lulus: landing/explore/token detail/create/dashboard/admin (role guard + API 403), signup email (SMTP Supabase), auto-`profiles`+`wallets` ter-encrypt, seed 2 token live tampil & ter-sitemap.
+> SEO: `robots.txt`, `sitemap.xml` (static + token live), JSON-LD `WebSite` + `WebPage`+harga.
+> Langkah berikutnya: ① isi `HELIUS_API_KEY` (helius.com gratis) + airdrop devnet ke treasury `4XSuNGXFqH2sSMteAxHWjF1y3Pgf5aCdBT29Ve2MUWSg` (faucet publik sedang error) untuk smoke on-chain, ② commit + push ke GitHub → Cloudflare Pages + secrets GitHub Actions (`worker.yml`) — **menunggu persetujuan**, ③ restart `opencode` agar MCP github/cloudflare aktif.
 
-First, run the development server:
+Komunitas financial market + launcher token Solana dengan liquidity pool, on-ramp USDC (topup/withdraw dari wallet eksternal), swap in-app, dan pembayaran fee pakai USDC — **tanpa biaya infrastruktur bulanan** (Supabase Free + Helius free + Cloudflare Pages + GitHub Actions cron).
+
+Dokumen: [`docs/PRD.md`](docs/PRD.md) · [`docs/IMPLEMENTATION_PLAN.md`](docs/IMPLEMENTATION_PLAN.md)
+
+## Stack
+
+- **Next.js 16** (App Router, Turbopack, React 19, Tailwind v4, ESLint 9)
+- **next-intl v4** — locale `/en` & `/id` (tanpa middleware, `createNextIntlPlugin`)
+- **Supabase** (Postgres + Auth + Storage) — RLS penuh
+- **Solana**: SPL Token + Metaplex umi (create token), **Raydium CPMM SDK v2** (pool & liquidity), **Jupiter** (swap), treasury platform menanggung seluruh gas SOL
+- **Worker**: `src/worker/run-jobs.ts` (queue job on-chain + refund), cron GitHub Actions tiap menit
+
+## Setup lokal
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm install --legacy-peer-deps
+cp .env.example .env
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Isi minimal: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`,
+`TREASURY_SECRET_KEY` (base58 dari `solana-keygen new --no-bip39-passphrase`),
+`WALLET_MASTER_KEY` (`openssl rand -base64 32`), `CRON_SECRET`.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+Database — jalankan migrasi lewat Supabase CLI / SQL editor:
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```
+supabase/migrations/0001_init.sql   # skema inti + RLS
+supabase/migrations/0002_storage.sql# bucket `token-assets` (public, 5MB)
+```
 
-## Learn More
+## Perintah
 
-To learn more about Next.js, take a look at the following resources:
+| Perintah | Fungsi |
+| --- | --- |
+| `npm run dev` | dev server (http://localhost:3000) |
+| `npm run lint` | ESLint |
+| `npm test` | unit test (vitest: pricing + format) |
+| `npm run typecheck` | `next typegen && tsc --noEmit` |
+| `npm run build` | production build |
+| `npm run worker` | worker job on-chain (atau via GitHub Actions cron) |
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Environment
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+Lihat [`.env.example`](.env.example). Catatan:
 
-## Deploy on Vercel
+- `NEXT_PUBLIC_SOLANA_CLUSTER=devnet|mainnet-beta` — USDC mint otomatis (`USDC_MINT` bisa dioverride).
+- `HELIUS_API_KEY` opsional (tanpa itu pakai RPC publik) — tanpa Helius, pemindaian balance TX paling akurat (getSignaturesForAddress) tidak tersedia dan terpaksa fallback.
+- `RESEND_API_KEY` opsional — tanpa ini kode OTP tampil di log dev saja.
+- `JUPITER_API_KEY` opsional untuk rate limit tinggi.
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## CI/CD
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- `.github/workflows/ci.yml` — lint + test + typecheck + build di tiap push/PR (Node 22).
+- `.github/workflows/worker.yml` — cron `run-jobs` tiap menit (butuh secrets: `SUPABASE_*`, `CRON_SECRET`, `TREASURY_SECRET_KEY`, `WALLET_MASTER_KEY`, `SOLANA cluster`, dsb.).
+
+## Biaya infrastruktur
+
+**$0/bulan** — Supabase Free (2 proyek), Helius free tier, Jupiter/Raydium/DEXScreener API gratis, GitHub Actions (60.000 menit/bulan), PostHog free tier (opsional). Gas on-chain seluruhnya ditanggung treasury platform.
