@@ -23,9 +23,10 @@ async function fetchOnChainPoolSummary(
     const info = await fetchPoolInfo(pool.pool_id);
     if (!info) return null;
     const token = pool.tokens as unknown as { decimals: number; supply: string | number };
-    // mintA = token (base), mintB = USDC (quote) saat createCpmmPool —
-    // cocokkan eksplisit agar tetap benar walau urutan berubah.
+    // mintA/mintB bisa terbalik — pastikan sisi quote = USDC sebelum hitung harga
     const baseIsToken = info.baseMint === mint;
+    const quoteIsUsdc = baseIsToken ? info.quoteMint === USDC_MINT : info.baseMint === USDC_MINT;
+    if (!quoteIsUsdc) return null;
     const baseRaw = Number(baseIsToken ? info.baseReserve : info.quoteReserve);
     const quoteRaw = Number(baseIsToken ? info.quoteReserve : info.baseReserve);
     if (!Number.isFinite(baseRaw) || !Number.isFinite(quoteRaw) || baseRaw <= 0 || quoteRaw <= 0) {

@@ -150,20 +150,28 @@ export interface PoolInfoLite {
 export async function fetchPoolInfo(poolId: string): Promise<PoolInfoLite | null> {
   try {
     const raydium = await initRaydium(getTreasury());
-    const { poolInfo } = await raydium.cpmm.getPoolInfoFromRpc(poolId);
+    const { poolInfo, poolKeys } = await raydium.cpmm.getPoolInfoFromRpc(poolId);
     const raw = poolInfo as unknown as {
-      mintA: { address: string; amount?: string };
-      mintB: { address: string; amount?: string };
-      lpSupply?: string;
+      mintA: { address: string };
+      mintB: { address: string };
       feeRate?: number;
     };
+    // SDK getPoolInfoFromRpc TIDAK mengisi amount — baca reserve aktual dari vault.
+    const vault = (poolKeys as { vault: Record<string, unknown> }).vault;
+    const vaultA = String(vault.A ?? vault.vaultA ?? "");
+    const vaultB = String(vault.B ?? vault.vaultB ?? "");
+    if (!vaultA || !vaultB) return null;
+    const [a, b] = await Promise.all([
+      rpcRead((c) => c.getTokenAccountBalance(new PublicKey(vaultA))),
+      rpcRead((c) => c.getTokenAccountBalance(new PublicKey(vaultB))),
+    ]);
     return {
       poolId,
       baseMint: raw.mintA.address,
       quoteMint: raw.mintB.address,
-      baseReserve: String(raw.mintA.amount ?? "0"),
-      quoteReserve: String(raw.mintB.amount ?? "0"),
-      lpSupply: String(raw.lpSupply ?? "0"),
+      baseReserve: a.value.amount,
+      quoteReserve: b.value.amount,
+      lpSupply: "0",
       feeRate: Number(raw.feeRate ?? 0.25),
       raw: poolInfo,
     };
