@@ -11,6 +11,7 @@ import {
   keypairIdentity,
   createSignerFromKeypair,
   createAmount,
+  none,
 } from "@metaplex-foundation/umi";
 import { createV1, TokenStandard } from "@metaplex-foundation/mpl-token-metadata";
 import { getConnection } from "@/lib/solana/connection";
@@ -73,12 +74,17 @@ export async function createSplToken(params: CreateTokenParams): Promise<CreateT
   );
   const metaSig = await createV1(umi, {
     mint: umiMint,
-    authority: umiUser, // update authority = user (bukan treasury)
+    // authority = mint authority di-chain (treasury, hasil langkah 1);
+    // di Token Metadata wajib cocok dengan mint, kalau tidak → error 0xa.
+    authority: umi.identity,
     payer: umi.identity,
     updateAuthority: umiUser.publicKey,
     name: params.name.slice(0, 32),
     symbol: params.symbol.slice(0, 10),
     uri: params.metadataUri,
+    // Tanpa creators: resolver default menandai authority (treasury) sbg
+    // creator verified — melanggar aturan "creator must sign" (error 0x36).
+    creators: none(),
     sellerFeeBasisPoints: createAmount(0, "%", 2),
     tokenStandard: TokenStandard.Fungible,
     isMutable: !params.immutableMetadata,

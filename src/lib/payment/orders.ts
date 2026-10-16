@@ -42,38 +42,62 @@ export async function createAndPayOrder(input: CreateOrderInput) {
   const feeRaw = usdcToRaw(price.amount_usdc ?? 0);
   const payUpfront = feeRaw > 0n && input.service !== "swap";
 
-  let paymentSignature: string | null = null;
+  // Cek saldo dulu agar 402 bersih tanpa menyisipkan row order.
   if (payUpfront) {
     const owner = await getWalletPublicKey(input.userId);
     const balances = await readOnChainBalances(owner.toBase58());
     if (balances.usdcRaw < feeRaw) {
       throw new OrderError("INSUFFICIENT_BALANCE", "Saldo USDC tidak cukup untuk membayar layanan.");
     }
-    const { getWalletKeypair } = await import("@/lib/solana/wallet");
-    const userKp = await getWalletKeypair(input.userId);
-    paymentSignature = await sendUsdcTransfer({
-      from: userKp,
-      toOwner: getTreasury().publicKey,
-      amountRaw: feeRaw,
-      feePayer: getTreasury(),
-    });
   }
 
-  const { data: order, error } = await db
+  // Catat order SEBELUM bayar — jejak tetap ada walau pembayaran on-chain gagal.
+  const { data: order, error: insertError } = await db
     .from("orders")
     .insert({
       user_id: input.userId,
       service: input.service,
       amount_raw: feeRaw.toString(),
-      status: payUpfront ? "paid" : "awaiting_payment",
+      status: "awaiting_payment",
       pricing: price,
       config: input.config,
-      payment_signature: paymentSignature,
+      payment_signature: null,
       idempotency_key: input.idempotencyKey ?? null,
     })
     .select("*")
     .single();
-  if (error) throw error;
+  if (insertError) throw insertError;
+
+  let paymentSignature: string | null = null;
+  if (payUpfront) {
+    try {
+      const { getWalletKeypair } = await import("@/lib/solana/wallet");
+      const userKp = await getWalletKeypair(input.userId);
+      paymentSignature = await sendUsdcTransfer({
+        from: userKp,
+        toOwner: getTreasury().publicKey,
+        amountRaw: feeRaw,
+        feePayer: getTreasury(),
+      });
+    } catch (e) {
+      await db
+        .from("orders")
+        .update({
+          status: "failed",
+          error: `Pembayaran gagal: ${e instanceof Error ? e.message : String(e)}`,
+        })
+        .eq("id", order.id);
+      throw e;
+    }
+    const { data: paidOrder, error: payError } = await db
+      .from("orders")
+      .update({ status: "paid", payment_signature: paymentSignature })
+      .eq("id", order.id)
+      .select("*")
+      .single();
+    if (payError) throw payError;
+    Object.assign(order, paidOrder);
+  }
 
   const jobType = SERVICE_JOB[input.service];
   if (jobType) {

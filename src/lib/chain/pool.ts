@@ -75,7 +75,18 @@ export async function createCpmmPool(p: CreatePoolParams): Promise<CreatePoolRes
   const mintA = await raydium.token.getTokenInfo(p.baseMint);
   const mintB = await raydium.token.getTokenInfo(p.quoteMint);
 
-  const { execute, extInfo } = await raydium.cpmm.createPool({
+  // Builder Raydium bermasalah dgn feePayer asing (akun user ter-mark readonly
+  // → PrivilegeEscalation). Pakai feePayer default = owner; user dibekali
+  // sedikit SOL oleh treasury (boros ≤0.001 SOL per pool).
+  const conn = getConnection();
+  const userSol = await conn.getBalance(p.owner.publicKey);
+  // CPMM creation fee protocol 0.15 SOL + rent akun (boros — hanya devnet/mainnet).
+  if (userSol < 260_000_000) {
+    const { gasDrop } = await import("@/lib/chain/swap");
+    await gasDrop(p.owner.publicKey.toBase58(), 250_000_000);
+  }
+
+  const built = await raydium.cpmm.createPool({
     programId: cpmmProgramId(),
     poolFeeAccount: cpmmFeeAccount(),
     mintA,
@@ -86,12 +97,25 @@ export async function createCpmmPool(p: CreatePoolParams): Promise<CreatePoolRes
     feeConfig,
     associatedOnly: false,
     ownerInfo: {},
-    feePayer: getTreasury().publicKey, // treasury menanggung biaya pool creation
     txVersion: TxVersion.V0,
     computeBudgetConfig: { ...COMPUTE_BUDGET },
   });
 
-  const res = await execute({ sendAndConfirm: true });
+  let res;
+  try {
+    res = await built.execute({ sendAndConfirm: true });
+  } catch (e) {
+    // Raydium SDK bisa melempar nilai non-Error (reject(undefined) saat confirm
+    // timeout) — simpan detail apa adanya.
+    const detail =
+      e instanceof Error
+        ? e.stack || e.message
+        : (e !== null && typeof e === "object"
+            ? JSON.stringify(e, Object.getOwnPropertyNames(e))
+            : String(e)) || String(e);
+    throw new Error(`Raydium createPool gagal: ${detail}`);
+  }
+  const { extInfo } = built;
   return {
     poolId: extInfo.address.poolId.toBase58(),
     lpMint: extInfo.address.lpMint.toBase58(),

@@ -13,6 +13,7 @@ import {
 } from "@solana/spl-token";
 import bs58 from "bs58";
 import { getConnection } from "@/lib/solana/connection";
+import { recoverExpiredSignature } from "@/lib/chain/confirm";
 import { USDC_MINT, USDC_DECIMALS } from "@/lib/config";
 
 /**
@@ -85,9 +86,15 @@ export async function sendUsdcTransfer(params: {
     ),
   );
 
-  return sendAndConfirmTransaction(conn, tx, [params.feePayer, params.from], {
-    commitment: "confirmed",
-  });
+  try {
+    return await sendAndConfirmTransaction(conn, tx, [params.feePayer, params.from], {
+      commitment: "confirmed",
+    });
+  } catch (e) {
+    const recovered = await recoverExpiredSignature(conn, e);
+    if (recovered) return recovered;
+    throw e;
+  }
 }
 
 export function getTreasury(): Keypair {
