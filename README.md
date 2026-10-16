@@ -4,7 +4,9 @@
 > Database Supabase **`vysgkjqbmgbbowsxafok`** sudah hidup: `apply_all.sql` (0001_init + 0002_storage + seed pricing) lewat MCP `apply_migration`; RLS advisors bersih; bucket `token-assets` aktif.
 > Smoke test lulus: landing/explore/token detail/create/dashboard/admin (role guard + API 403), signup email (SMTP Supabase), auto-`profiles`+`wallets` ter-encrypt, seed 2 token live tampil & ter-sitemap.
 > SEO: `robots.txt`, `sitemap.xml` (static + token live), JSON-LD `WebSite` + `WebPage`+harga.
-> Langkah berikutnya: ① isi `HELIUS_API_KEY` (helius.com gratis) + airdrop devnet ke treasury `4XSuNGXFqH2sSMteAxHWjF1y3Pgf5aCdBT29Ve2MUWSg` (faucet publik sedang error) untuk smoke on-chain, ② commit + push ke GitHub → Cloudflare Pages + secrets GitHub Actions (`worker.yml`) — **menunggu persetujuan**, ③ restart `opencode` agar MCP github/cloudflare aktif.
+> GitHub: repo private **`tradingekaryan-ux/artian-capital-group`** — 2 commit terpush, CI hijau ×2, 7 actions secrets terpasang, **Job Worker terverifikasi jalan end-to-end** (dispatch manual sukses).
+> Adapter Cloudflare terpasang (`@opennextjs/cloudflare` + `wrangler.jsonc` + scripts `deploy`/`preview`) — build adapter lokal sukses (worker.js + aset 43MB).
+> Langkah berikutnya: ① **Cloudflare API Token** dari dashboard (User → API Tokens → template *Edit Cloudflare Workers*) → `npm run deploy` → set secrets worker + `NEXT_PUBLIC_SITE_URL` → smoke live, ② isi `HELIUS_API_KEY` + airdrop devnet ke treasury `4XSuNGXFqH2sSMteAxHWjF1y3Pgf5aCdBT29Ve2MUWSg` → smoke on-chain, ③ (opsional) rotate kredensial yang pernah lewat chat.
 
 Komunitas financial market + launcher token Solana dengan liquidity pool, on-ramp USDC (topup/withdraw dari wallet eksternal), swap in-app, dan pembayaran fee pakai USDC — **tanpa biaya infrastruktur bulanan** (Supabase Free + Helius free + Cloudflare Pages + GitHub Actions cron).
 
