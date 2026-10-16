@@ -2,7 +2,7 @@ import { PublicKey } from "@solana/web3.js";
 import { getAssociatedTokenAddressSync } from "@solana/spl-token";
 import { supabaseAdmin } from "@/lib/db/client";
 import { generateWalletKeypair, keypairFromEncrypted } from "@/lib/solana/keypair";
-import { getConnection } from "@/lib/solana/connection";
+import { rpcRead } from "@/lib/solana/connection";
 import { USDC_MINT, LAMPORTS_PER_SOL } from "@/lib/config";
 import type { Keypair } from "@solana/web3.js";
 
@@ -76,18 +76,18 @@ export interface Balances {
 
 /** Baca saldo on-chain (USDC + SOL) — sumber kebenaran = chain. */
 export async function readOnChainBalances(ownerBase58: string): Promise<Balances> {
-  const conn = getConnection();
   const owner = new PublicKey(ownerBase58);
-  const sol = await conn.getBalance(owner);
+  const sol = BigInt(await rpcRead((c) => c.getBalance(owner)));
+  const ata = usdcAta(owner);
+  // getAccountInfo dulu: null = ATA belum dibuat (saldo 0, wajar);
+  // RPC total gagal melempar → JANGAN dilaporkan sebagai saldo 0.
+  const acctInfo = await rpcRead((c) => c.getAccountInfo(ata));
   let usdc = 0n;
-  try {
-    const ata = usdcAta(owner);
-    const acct = await conn.getTokenAccountBalance(ata);
-    usdc = BigInt(acct.value.amount);
-  } catch {
-    usdc = 0n; // ATA belum dibuat
+  if (acctInfo) {
+    const bal = await rpcRead((c) => c.getTokenAccountBalance(ata));
+    usdc = BigInt(bal.value.amount);
   }
-  return { usdcRaw: usdc, solLamports: BigInt(sol) };
+  return { usdcRaw: usdc, solLamports: sol };
 }
 
 /** Refresh cache saldo + kembalikan nilai terbaru. */

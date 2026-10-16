@@ -1,5 +1,24 @@
+import { z } from "zod";
 import { supabaseAdmin } from "@/lib/db/client";
 import { USDC_DECIMALS } from "@/lib/config";
+
+/**
+ * Skema ketat untuk value pricing_config (dipakai PATCH admin) —
+ * cegah config "rusak" (tipe salah / field asing) yang membuat fee gagal dihitung.
+ */
+export const pricingValueSchema = z
+  .strictObject({
+    label: z.string().max(80).optional(),
+    amount_usdc: z.number().min(0).max(1_000_000).optional(),
+    flat_usdc: z.number().min(0).max(1_000_000).optional(),
+    percent: z.number().min(0).max(100).optional(),
+    min_usdc: z.number().min(0).max(1_000_000).optional(),
+    max_daily_usdc: z.number().min(0).max(1_000_000).optional(),
+  })
+  .refine(
+    (v) => v.amount_usdc !== undefined || v.flat_usdc !== undefined || v.percent !== undefined,
+    { message: "value harus memuat minimal amount_usdc, flat_usdc, atau percent" },
+  );
 
 export type ServiceKey =
   | "create_token"

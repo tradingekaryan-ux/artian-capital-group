@@ -1,5 +1,52 @@
-import { DEXSCREENER_API_BASE, JUPITER, USDC_MINT } from "@/lib/config";
+import { DEXSCREENER_API_BASE, JUPITER, USDC_MINT, USDC_DECIMALS } from "@/lib/config";
 import { supabaseAdmin } from "@/lib/db/client";
+
+/**
+ * Harga dari reserves pool Raydium on-chain — fallback untuk token yang tidak
+ * ter-index DexScreener/Jupiter (token devnet). Dipanggil dinamis agar SDK
+ * Raydium tidak ikut ter-bundle ke modul lain.
+ */
+async function fetchOnChainPoolSummary(
+  mint: string,
+): Promise<Pick<MarketSummary, "priceUsd" | "liquidityUsd" | "fdv" | "poolCount"> | null> {
+  try {
+    const db = supabaseAdmin();
+    const { data: pool } = await db
+      .from("pools")
+      .select("pool_id, tokens!inner(decimals, supply)")
+      .eq("status", "active")
+      .eq("tokens.mint", mint)
+      .limit(1)
+      .maybeSingle();
+    if (!pool?.pool_id) return null;
+    const { fetchPoolInfo } = await import("@/lib/chain/pool");
+    const info = await fetchPoolInfo(pool.pool_id);
+    if (!info) return null;
+    const token = pool.tokens as unknown as { decimals: number; supply: string | number };
+    // mintA = token (base), mintB = USDC (quote) saat createCpmmPool —
+    // cocokkan eksplisit agar tetap benar walau urutan berubah.
+    const baseIsToken = info.baseMint === mint;
+    const baseRaw = Number(baseIsToken ? info.baseReserve : info.quoteReserve);
+    const quoteRaw = Number(baseIsToken ? info.quoteReserve : info.baseReserve);
+    if (!Number.isFinite(baseRaw) || !Number.isFinite(quoteRaw) || baseRaw <= 0 || quoteRaw <= 0) {
+      return null;
+    }
+    const baseUi = baseRaw / 10 ** token.decimals;
+    const quoteUi = quoteRaw / 10 ** USDC_DECIMALS;
+    const priceUsd = quoteUi / baseUi;
+    if (!Number.isFinite(priceUsd) || priceUsd <= 0) return null;
+    // tokens.supply disimpan dalam unit UI (lihat handleCreateToken: supply: cfg.supply)
+    const supplyUi = Number(token.supply);
+    return {
+      priceUsd,
+      liquidityUsd: quoteUi * 2,
+      fdv: supplyUi > 0 ? priceUsd * supplyUi : null,
+      poolCount: 1,
+    };
+  } catch {
+    return null;
+  }
+}
 
 export interface DexTokenPair {
   chainId: string;
@@ -28,7 +75,7 @@ export async function fetchDexPairs(mint: string): Promise<DexTokenPair[]> {
   return Array.isArray(data) ? (data as DexTokenPair[]) : [];
 }
 
-/** Harga USD token (pair dengan likuiditas terdalam; fallback Jupiter). */
+/** Harga USD token (pair dengan likuiditas terdalam; fallback Jupiter → on-chain pool). */
 export async function fetchTokenPriceUsd(mint: string): Promise<number | null> {
   if (mint === USDC_MINT) return 1;
   const pairs = await fetchDexPairs(mint);
@@ -47,7 +94,8 @@ export async function fetchTokenPriceUsd(mint: string): Promise<number | null> {
   } catch {
     /* fallback gagal */
   }
-  return null;
+  const onchain = await fetchOnChainPoolSummary(mint);
+  return onchain?.priceUsd ?? null;
 }
 
 export interface MarketSummary {
@@ -67,15 +115,29 @@ export async function fetchMarketSummary(mint: string): Promise<MarketSummary> {
     (a, b) => (b.liquidity?.usd ?? 0) - (a.liquidity?.usd ?? 0),
   );
   const top = sorted[0];
+  if (top?.priceUsd) {
+    return {
+      priceUsd: Number(top.priceUsd),
+      change1h: top.priceChange?.h1 ?? null,
+      change24h: top.priceChange?.h24 ?? null,
+      liquidityUsd: top.liquidity?.usd ?? null,
+      volume24h: top.volume?.h24 ?? null,
+      fdv: top.fdv ?? null,
+      txns24h: top.txns?.h24 ?? null,
+      poolCount: pairs.length,
+    };
+  }
+  // token devnet / tak ter-index: harga dari reserves pool on-chain
+  const onchain = await fetchOnChainPoolSummary(mint);
   return {
-    priceUsd: top?.priceUsd ? Number(top.priceUsd) : null,
-    change1h: top?.priceChange?.h1 ?? null,
-    change24h: top?.priceChange?.h24 ?? null,
-    liquidityUsd: top?.liquidity?.usd ?? null,
-    volume24h: top?.volume?.h24 ?? null,
-    fdv: top?.fdv ?? null,
-    txns24h: top?.txns?.h24 ?? null,
-    poolCount: pairs.length,
+    priceUsd: onchain?.priceUsd ?? null,
+    change1h: null,
+    change24h: null,
+    liquidityUsd: onchain?.liquidityUsd ?? null,
+    volume24h: null,
+    fdv: onchain?.fdv ?? null,
+    txns24h: null,
+    poolCount: onchain?.poolCount ?? pairs.length,
   };
 }
 

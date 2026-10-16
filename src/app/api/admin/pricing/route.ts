@@ -3,6 +3,7 @@ import { z } from "zod";
 import { requireAdmin } from "@/lib/admin";
 import { supabaseAdmin } from "@/lib/db/client";
 import { audit } from "@/lib/security/audit";
+import { pricingValueSchema } from "@/lib/payment/pricing";
 
 const bodySchema = z.object({
   key: z.enum([
@@ -13,7 +14,7 @@ const bodySchema = z.object({
     "swap",
     "withdraw",
   ]),
-  value: z.record(z.string(), z.unknown()),
+  value: pricingValueSchema,
 });
 
 export async function PATCH(req: Request) {
@@ -27,9 +28,9 @@ export async function PATCH(req: Request) {
     return NextResponse.json({ error: "Body tidak valid" }, { status: 400 });
   }
   const parsed = bodySchema.safeParse(json);
-  if (!parsed.success) return NextResponse.json({ error: "Validasi gagal" }, { status: 400 });
-  if (Object.keys(parsed.data.value).length === 0) {
-    return NextResponse.json({ error: "Value tidak boleh kosong" }, { status: 400 });
+  if (!parsed.success) {
+    const msg = parsed.error.issues[0]?.message ?? "Validasi gagal";
+    return NextResponse.json({ error: msg }, { status: 400 });
   }
 
   const { error } = await supabaseAdmin()

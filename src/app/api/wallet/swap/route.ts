@@ -1,8 +1,9 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { PublicKey } from "@solana/web3.js";
 import { requireUser, supabaseAdmin } from "@/lib/db/client";
 import { ensureWallet, readOnChainBalances, getWalletPublicKey } from "@/lib/solana/wallet";
-import { getConnection } from "@/lib/solana/connection";
+import { rpcRead } from "@/lib/solana/connection";
 import { rateLimit, clientIp } from "@/lib/security/ratelimit";
 import { audit } from "@/lib/security/audit";
 import { getPrice, swapFeeRaw } from "@/lib/payment/pricing";
@@ -70,17 +71,15 @@ export async function POST(req: Request) {
       decimals = token.decimals;
       amountRaw = BigInt(Math.round(amount * 10 ** decimals));
 
-      // cek saldo token (best-effort)
-      try {
-        const { getAssociatedTokenAddressSync } = await import("@solana/spl-token");
-        const { PublicKey } = await import("@solana/web3.js");
-        const ata = getAssociatedTokenAddressSync(new PublicKey(asset), owner);
-        const bal = await getConnection().getTokenAccountBalance(ata);
-        if (BigInt(bal.value.amount) < amountRaw) {
-          return NextResponse.json({ error: "Saldo token tidak cukup." }, { status: 402 });
-        }
-      } catch {
-        /* ATA belum ada = saldo 0 */
+      // cek saldo token: getAccountInfo dulu — null = ATA belum ada (saldo 0).
+      // RPC gagal sungguhan MELEMPAR (→ 500 di catch luar), bukan "tidak cukup".
+      const { getAssociatedTokenAddressSync } = await import("@solana/spl-token");
+      const ata = getAssociatedTokenAddressSync(new PublicKey(asset), owner);
+      const acctInfo = await rpcRead((c) => c.getAccountInfo(ata));
+      const held = acctInfo
+        ? BigInt((await rpcRead((c) => c.getTokenAccountBalance(ata))).value.amount)
+        : 0n;
+      if (held < amountRaw) {
         return NextResponse.json({ error: "Saldo token tidak cukup." }, { status: 402 });
       }
     }

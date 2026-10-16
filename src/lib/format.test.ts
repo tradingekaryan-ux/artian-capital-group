@@ -6,6 +6,7 @@ import {
   rawToUsdc,
   shortAddress,
   formatDate,
+  sanitizeSearchQuery,
 } from "@/lib/format";
 
 describe("format", () => {
@@ -37,5 +38,21 @@ describe("format", () => {
   it("formatDate", () => {
     expect(formatDate("2026-01-15T00:00:00.000Z")).toContain("2026");
     expect(formatDate("invalid")).toBe("invalid");
+  });
+});
+
+describe("sanitizeSearchQuery", () => {
+  it("membuang karakter metacharacter PostgREST or-filter", () => {
+    expect(sanitizeSearchQuery("foo,bar")).toBe("foobar");
+    expect(sanitizeSearchQuery("a)OR(mint.eq.X")).toBe("aORmint.eq.X");
+    expect(sanitizeSearchQuery("name.ilike.%x%")).toBe("name.ilike.x");
+  });
+
+  it("mempertahankan huruf, angka, tanda minus/titik/spasi", () => {
+    expect(sanitizeSearchQuery("SMOKE Token 2.0-beta")).toBe("SMOKE Token 2.0-beta");
+  });
+
+  it("membatasi panjang 64 karakter", () => {
+    expect(sanitizeSearchQuery("x".repeat(100)).length).toBe(64);
   });
 });

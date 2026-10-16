@@ -45,6 +45,15 @@ function defaultRpc(): string {
 
 export const RPC_URL = defaultRpc();
 
+/**
+ * RPC cadangan (publik cluster) untuk failover read — dipakai saat primary
+ * error (mis. Helius devnet sempat 500 untuk getBalance semua akun).
+ */
+export const RPC_FALLBACK_URLS: string[] = (() => {
+  const pub = IS_MAINNET ? "https://api.mainnet-beta.solana.com" : "https://api.devnet.solana.com";
+  return RPC_URL === pub ? [] : [pub];
+})();
+
 export const JUPITER = {
   apiBase: envOr("JUPITER_API_BASE", "https://lite-api.jup.ag"),
   apiKey: process.env.JUPITER_API_KEY ?? "",

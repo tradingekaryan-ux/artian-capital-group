@@ -12,7 +12,7 @@ import type {
   ApiV3PoolInfoStandardItemCpmm,
   CpmmKeys,
 } from "@raydium-io/raydium-sdk-v2";
-import { getConnection } from "@/lib/solana/connection";
+import { getConnection, rpcRead } from "@/lib/solana/connection";
 import { getTreasury } from "@/lib/chain/usdc";
 import { IS_MAINNET } from "@/lib/config";
 
@@ -78,8 +78,7 @@ export async function createCpmmPool(p: CreatePoolParams): Promise<CreatePoolRes
   // Builder Raydium bermasalah dgn feePayer asing (akun user ter-mark readonly
   // → PrivilegeEscalation). Pakai feePayer default = owner; user dibekali
   // sedikit SOL oleh treasury (boros ≤0.001 SOL per pool).
-  const conn = getConnection();
-  const userSol = await conn.getBalance(p.owner.publicKey);
+  const userSol = await rpcRead((c) => c.getBalance(p.owner.publicKey));
   // CPMM creation fee protocol 0.15 SOL + rent akun (boros — hanya devnet/mainnet).
   if (userSol < 260_000_000) {
     const { gasDrop } = await import("@/lib/chain/swap");

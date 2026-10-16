@@ -1,7 +1,7 @@
 import { getTranslations, setRequestLocale } from "next-intl/server";
 import { Link } from "@/i18n/navigation";
 import { supabaseAdmin } from "@/lib/db/client";
-import { formatCompact, formatUsd, shortAddress } from "@/lib/format";
+import { formatCompact, formatUsd, shortAddress, sanitizeSearchQuery } from "@/lib/format";
 
 export default async function ExplorePage({
   params,
@@ -117,8 +117,9 @@ interface TokenItem {
   change24h: number | null;
 }
 
-async function loadTokens(q: string, sort: "new" | "top"): Promise<TokenItem[]> {
+async function loadTokens(rawQ: string, sort: "new" | "top"): Promise<TokenItem[]> {
   try {
+    const q = sanitizeSearchQuery(rawQ);
     const db = supabaseAdmin();
     let query = db
       .from("tokens")

@@ -12,7 +12,7 @@ import {
   removeLiquidity as poolRemoveLiquidity,
 } from "@/lib/chain/pool";
 import { executeSwapToUsdc, gasDrop } from "@/lib/chain/swap";
-import { getConnection } from "@/lib/solana/connection";
+import { rpcRead } from "@/lib/solana/connection";
 import { SOL_MINT, USDC_MINT, LAMPORTS_PER_SOL } from "@/lib/config";
 import {
   completeJob,
@@ -378,9 +378,8 @@ async function handleIndexWallet(payload: Record<string, unknown>): Promise<void
     .single();
   if (!wallet) return;
 
-  const conn = getConnection();
   const ata = usdcAta(new PublicKey(wallet.public_key));
-  const sigs = await conn.getSignaturesForAddress(ata, { limit: 25 });
+  const sigs = await rpcRead((c) => c.getSignaturesForAddress(ata, { limit: 25 }));
   for (const s of sigs) {
     const { data: existing } = await db
       .from("wallet_events")
@@ -389,10 +388,12 @@ async function handleIndexWallet(payload: Record<string, unknown>): Promise<void
       .eq("signature", s.signature)
       .maybeSingle();
     if (existing) continue;
-    const tx = await conn.getParsedTransaction(s.signature, {
-      maxSupportedTransactionVersion: 0,
-      commitment: "confirmed",
-    });
+    const tx = await rpcRead((c) =>
+      c.getParsedTransaction(s.signature, {
+        maxSupportedTransactionVersion: 0,
+        commitment: "confirmed",
+      }),
+    );
     if (!tx?.meta?.postTokenBalances) continue;
     const ownerPk = wallet.public_key;
     const post = tx.meta.postTokenBalances.find(
@@ -432,7 +433,8 @@ async function handlePriceSnapshot(): Promise<void> {
     try {
       const summary = await fetchMarketSummary(t.mint);
       await saveSnapshot(t.mint, summary);
-    } catch {
+    } catch (e) {
+      console.error(`[price_snapshot] ${t.mint} gagal:`, e);
       /* satu token gagal tidak menghentikan batch */
     }
   }
@@ -441,8 +443,7 @@ async function handlePriceSnapshot(): Promise<void> {
 /* ───────────────── treasury_rebalance ───────────────── */
 async function handleTreasuryRebalance(): Promise<void> {
   const treasury = getTreasury();
-  const conn = getConnection();
-  const solBalance = await conn.getBalance(treasury.publicKey);
+  const solBalance = await rpcRead((c) => c.getBalance(treasury.publicKey));
   const warn = 0.3 * LAMPORTS_PER_SOL;
   if (solBalance >= warn) return;
   // tukar 5 USDC milik treasury → SOL (fee payer = treasury sendiri, masih ada SOL sisa)

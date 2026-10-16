@@ -67,3 +67,12 @@ export function formatPercent(value: number): string {
   const sign = value > 0 ? "+" : "";
   return `${sign}${value.toFixed(2)}%`;
 }
+
+/**
+ * Amankan input pencarian untuk disuntikkan ke PostgREST `or=` filter.
+ * Buang karakter metacharacter filter (koma, kurung) dan batasi panjang —
+ * cegah query pecah / filter-injection dari parameter `?q=`.
+ */
+export function sanitizeSearchQuery(raw: string): string {
+  return raw.replace(/[^A-Za-z0-9.\-_ ]/g, "").slice(0, 64).trim();
+}
