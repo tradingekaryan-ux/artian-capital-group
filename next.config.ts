@@ -25,3 +25,7 @@ const nextConfig: NextConfig = {
 };
 
 export default withNextIntl(nextConfig);
+
+// Catatan: initOpenNextCloudflareForDev() sengaja TIDAK dipanggil — app tidak
+// memakai binding Cloudflare lokal, dan workerd tidak bisa jalan di macOS 12.6.
+// Tambahkan kembali bila dev machine ≥ macOS 13.5 / Linux dan butuh binding.

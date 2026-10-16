@@ -10,6 +10,10 @@
     "typecheck": "next typegen && tsc --noEmit",
     "test": "vitest run",
     "worker": "tsx src/worker/run-jobs.ts",
+    "preview": "opennextjs-cloudflare build && opennextjs-cloudflare preview",
+    "deploy": "opennextjs-cloudflare build && opennextjs-cloudflare deploy",
+    "upload": "opennextjs-cloudflare build && opennextjs-cloudflare upload",
+    "cf-typegen": "wrangler types --env-interface CloudflareEnv cloudflare-env.d.ts",
     "db:types": "echo 'supabase gen types --local > src/lib/db/types.ts (manual)'"
   },
   "dependencies": {
@@ -31,6 +35,7 @@
     "zod": "^4.6.7"
   },
   "devDependencies": {
+    "@opennextjs/cloudflare": "^1.20.12",
     "@tailwindcss/turbopack": "^4",
     "@types/bn.js": "^5.2.0",
     "@types/node": "^20",
@@ -39,10 +44,12 @@
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "16.4.2",
+    "rclone.js": "^0.6.6",
     "tailwindcss": "^4",
     "tsx": "^4.23.15",
     "typescript": "^5",
-    "vitest": "^4.1.12"
+    "vitest": "^4.1.12",
+    "wrangler": "^4.151.0"
   },
   "overrides": {
     "rpc-websockets": {
