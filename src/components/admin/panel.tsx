@@ -8,7 +8,7 @@ interface Overview {
   jobs: { list: JobItem[]; pending: number };
   orders: OrderItem[];
   withdrawals: OrderItem[];
-  treasury: { sol: number; usdc: number };
+  treasury: { sol: number; usdc: number; address: string | null };
 }
 
 interface JobItem {
@@ -64,15 +64,25 @@ export function AdminPanel() {
           <span className="chrome-dots"><span /><span /><span /></span>
           <span className="text-muted-ink">{t("treasury")}</span>
         </div>
-        <div className="grid grid-cols-2 gap-3 p-5 text-sm">
-          <div className="rounded-xl border-2 border-black bg-[#f5f3ff] p-3">
-            <p className="text-[10px] font-bold uppercase tracking-wide text-muted-ink">SOL</p>
-            <p className="display mt-1 text-2xl">{data.treasury.sol.toFixed(4)}</p>
+        <div className="flex flex-col gap-3 p-5 text-sm">
+          <div className="grid grid-cols-2 gap-3">
+            <div className="rounded-xl border-2 border-black bg-[#f5f3ff] p-3">
+              <p className="text-[10px] font-bold uppercase tracking-wide text-muted-ink">SOL</p>
+              <p className="display mt-1 text-2xl">{data.treasury.sol.toFixed(4)}</p>
+            </div>
+            <div className="rounded-xl border-2 border-black bg-[#f5f3ff] p-3">
+              <p className="text-[10px] font-bold uppercase tracking-wide text-muted-ink">USDC</p>
+              <p className="display mt-1 text-2xl">{data.treasury.usdc.toFixed(2)}</p>
+            </div>
           </div>
-          <div className="rounded-xl border-2 border-black bg-[#f5f3ff] p-3">
-            <p className="text-[10px] font-bold uppercase tracking-wide text-muted-ink">USDC</p>
-            <p className="display mt-1 text-2xl">{data.treasury.usdc.toFixed(2)}</p>
-          </div>
+          {data.treasury.address && (
+            <div className="rounded-xl border-2 border-black bg-white p-3">
+              <p className="text-[10px] font-bold uppercase tracking-wide text-muted-ink">
+                {t("treasuryAddress")}
+              </p>
+              <p className="mono mt-1 break-all text-xs font-bold">{data.treasury.address}</p>
+            </div>
+          )}
         </div>
       </section>
 

@@ -30,6 +30,13 @@ export interface CreateOrderInput {
   kind?: WalletKind;
   /** Kunci harga bila berbeda dari service (burn_earn memakai tarif 'burn_earn'). */
   pricingKey?: ServiceKey;
+  /**
+   * Layanan yang fee/gas-nya menyusul (mis. `create_pool` dari bundling wizard):
+   * di-PREFLIGHT dikenakan cek saldo USDC + SOL gabungan, tapi yang ditransfer
+   * sekarang tetap hanya fee `service` utama — fee layanan menyusul di-charge
+   * saat runner-nya benar-benar menjalankannya.
+   */
+  deferredServices?: ServiceKey[];
 }
 
 /**
@@ -76,10 +83,20 @@ export async function createAndPayOrder(input: CreateOrderInput) {
   const feeRaw = usdcToRaw(price.amount_usdc ?? 0);
   const payUpfront = feeRaw > 0n && input.service !== "swap";
 
+  // Fee & gas layanan menyusul (deferred) — ikut disurf-check di muka,
+  // tidak ditransfer sekarang.
+  let deferredFeeRaw = 0n;
+  let deferredSol = 0;
+  for (const key of input.deferredServices ?? []) {
+    const p = await getPrice(key);
+    deferredFeeRaw += usdcToRaw(p.amount_usdc ?? 0);
+    deferredSol += requiredSolFor(key);
+  }
+
   // Cek saldo dulu agar 402 bersih tanpa menyisipkan row order.
   // SOL = gas on-chain (dibayar dari saldo user; platform tidak mendanai treasury).
   const balances = await readOnChainBalances(wallet.public_key, kind);
-  if (payUpfront && balances.usdcRaw < feeRaw) {
+  if ((payUpfront || deferredFeeRaw > 0n) && balances.usdcRaw < feeRaw + deferredFeeRaw) {
     throw new OrderError(
       "INSUFFICIENT_BALANCE",
       kind === "demo"
@@ -87,7 +104,7 @@ export async function createAndPayOrder(input: CreateOrderInput) {
         : "Insufficient USDC to pay for this service.",
     );
   }
-  const requiredSol = requiredSolFor(input.service);
+  const requiredSol = requiredSolFor(input.service) + deferredSol;
   if (balances.solLamports < BigInt(Math.ceil(requiredSol * LAMPORTS_PER_SOL))) {
     throw new OrderError(
       "INSUFFICIENT_SOL",

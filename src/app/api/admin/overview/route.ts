@@ -34,7 +34,11 @@ export async function GET() {
     const pricing = await getPricing();
     const pendingJobs = jobs.data?.filter((j) => j.status === "pending").length ?? 0;
 
-    let treasury = { sol: 0, usdc: 0 };
+    let treasury: { sol: number; usdc: number; address: string | null } = {
+      sol: 0,
+      usdc: 0,
+      address: null,
+    };
     try {
       const [{ PublicKey }] = await Promise.all([import("@solana/web3.js")]);
       const { USDC_MINT } = await import("@/lib/config");
@@ -49,6 +53,7 @@ export async function GET() {
       treasury = {
         sol: solBal / LAMPORTS_PER_SOL,
         usdc: usdcBal ? Number(usdcBal.value.uiAmountString ?? 0) : 0,
+        address: t.publicKey.toBase58(),
       };
     } catch {
       /* TREASURY_SECRET_KEY belum di-set — tampilkan nol */

@@ -12,7 +12,7 @@
 > Bug yang diperbaiki saat smoke: env string-kosong tak fallback (`envOr`), race confirm Workers → tx finalized tapi dilempar expired (`recoverExpiredSignature` + order disimpan sebelum bayar), Metaplex authority/creators (`0xa`/`0x36`), Raydium feePayer asing → PrivilegeEscalation + `reject(undefined)` (gas-drop user, feePayer default owner).
 > **Sisa:** ① rotate SEMUA kredensial yang pernah lewat chat (Supabase, PAT GitHub, Helius, token Cloudflare), ② spike/aturan fee-tier pool UI (F4), ③ lupa-password flow + QR deposit (lupa-password **dihapus** — tanpa Resend; OTP withdraw = devCode), ④ ~~`JUPITER_API_KEY`~~ sudah (Server key); `RESEND_API_KEY` sengaja dikosongkan.
 
-Komunitas financial market + launcher token Solana dengan liquidity pool, on-ramp USDC (topup/withdraw dari wallet eksternal), swap in-app, burn token & Burn-Earn (reward point), pembayaran fee pakai USDC, serta **mode demo devnet + multi-wallet** untuk latihan sebelum pakai dana sungguhan — **tanpa biaya infrastruktur bulanan** (Supabase Free + Helius free + Cloudflare Workers + GitHub Actions cron).
+Komunitas financial market + launcher token Solana dengan liquidity pool, on-ramp USDC (topup/withdraw dari wallet eksternal), swap in-app, burn token & Burn-Earn (reward point), pembayaran fee pakai USDC, serta **mode demo devnet + multi-wallet** untuk latihan sebelum pakai dana sungguhan — **tanpa biaya infrastruktur bulanan** (Supabase Free + Helius free + Cloudflare Workers + Cloudflare Cron Trigger).
 
 Dokumen: [`docs/PRD.md`](docs/PRD.md) · [`docs/IMPLEMENTATION_PLAN.md`](docs/IMPLEMENTATION_PLAN.md)
 
@@ -22,7 +22,7 @@ Dokumen: [`docs/PRD.md`](docs/PRD.md) · [`docs/IMPLEMENTATION_PLAN.md`](docs/IM
 - **next-intl v4** — locale `/en` & `/id` (tanpa middleware, `createNextIntlPlugin`)
 - **Supabase** (Postgres + Auth + Storage) — RLS penuh
 - **Solana**: SPL Token + Metaplex umi (create token), **Raydium CPMM SDK v2** (pool & liquidity), **Jupiter** (swap), gas on-chain dibayar dari **saldo SOL milik user** (wallet user = fee-payer; platform tidak mendanai gas)
-- **Worker**: `src/worker/run-jobs.ts` (queue job on-chain + refund), cron GitHub Actions tiap menit
+- **Worker**: `src/worker/run-jobs.ts` (queue job on-chain + refund), cron Cloudflare (`artian-cron`) tiap menit
 
 ## Setup lokal
 
@@ -51,14 +51,14 @@ supabase/migrations/0002_storage.sql# bucket `token-assets` (public, 5MB)
 | `npm test` | unit test (vitest: pricing + format) |
 | `npm run typecheck` | `next typegen && tsc --noEmit` |
 | `npm run build` | production build |
-| `npm run worker` | worker job on-chain (atau via GitHub Actions cron) |
+| `npm run worker` | worker job on-chain (atau via cron Cloudflare / GitHub Actions manual) |
 | `npm run deploy:cf` | build OpenNext + deploy ke Cloudflare Workers (butuh `CLOUDFLARE_API_TOKEN` + `CLOUDFLARE_ACCOUNT_ID`) |
 
 ## Environment
 
 Lihat [`.env.example`](.env.example). Catatan:
 
-- `NEXT_PUBLIC_SOLANA_CLUSTER=devnet|mainnet-beta` — USDC mint otomatis (`USDC_MINT` bisa dioverride). Saat ini **devnet**.
+- `NEXT_PUBLIC_SOLANA_CLUSTER=devnet|mainnet-beta` — USDC mint otomatis (`USDC_MINT` bisa dioverride). Saat ini **mainnet-beta** (wallet `kind=demo` tetap di devnet).
 - `HELIUS_API_KEY` opsional (tanpa itu pakai RPC publik) — tanpa Helius, pemindaian balance TX paling akurat (getSignaturesForAddress) tidak tersedia dan terpaksa fallback.
 - `RESEND_API_KEY` **sengaja kosong** (keputusan 17 Okt): tanpa reset password; kode OTP withdraw tampil langsung di UI (devCode, mode MVP).
 - `JUPITER_API_KEY` sudah terisi (Server key dari developers.jup.ag) + terpasang sebagai Worker secret.
@@ -72,4 +72,4 @@ Lihat [`.env.example`](.env.example). Catatan:
 
 ## Biaya infrastruktur
 
-**$0/bulan** — Supabase Free (2 proyek), Helius free tier, Jupiter/Raydium/DEXScreener API gratis, GitHub Actions (60.000 menit/bulan), PostHog free tier (opsional). Gas on-chain **dibayar user dari saldo SOL miliknya** (user-paid gas) — biaya gas platform $0, operator tidak perlu mengisi treasury.
+**$0/bulan** — Supabase Free (2 proyek), Helius free tier, Jupiter/Raydium/DEXScreener API gratis, Cloudflare Cron Triggers, PostHog free tier (opsional). Gas on-chain **dibayar user dari saldo SOL miliknya** (user-paid gas) — biaya gas platform $0, operator tidak perlu mengisi treasury.

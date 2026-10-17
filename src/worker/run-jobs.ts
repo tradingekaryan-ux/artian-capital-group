@@ -1,6 +1,7 @@
 /**
- * Entry worker job-queue — dijalankan via GitHub Actions cron (1 menit)
+ * Entry worker job-queue — dijalankan via GitHub Actions (manual fallback)
  * atau lokal: `npm run worker`.
+ * Jadwal 1 menit di produksi: Cloudflare Cron Trigger `artian-cron` → /api/cron/run-jobs.
  *
  * Mendukung:
  *   npm run worker            → satu pass

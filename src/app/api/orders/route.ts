@@ -38,6 +38,14 @@ const createTokenSchema = z
       revokeMint: z.boolean().default(true),
       revokeFreeze: z.boolean().default(true),
       immutable: z.boolean().default(false),
+      /** Initial liquidity pool — dibuat & dfee otomatis setelah token confirmed. */
+      pool: z
+        .object({
+          quoteAmount: amountString,
+          lpPercentage: z.number().int().min(1).max(100),
+          feeBps: z.number().int().min(1).max(100).optional(),
+        })
+        .optional(),
     }),
     kind: kindField,
     idempotencyKey: z.string().max(100).optional(),
@@ -52,6 +60,17 @@ const createTokenSchema = z
         message: e instanceof Error ? e.message : "invalid supply",
         path: ["config", "supply"],
       });
+    }
+    if (data.config.pool) {
+      try {
+        if (uiToRaw(data.config.pool.quoteAmount, 6) <= 0n) throw new Error("quoteAmount must be > 0");
+      } catch (e) {
+        ctx.addIssue({
+          code: "custom",
+          message: e instanceof Error ? e.message : "invalid pool quoteAmount",
+          path: ["config", "pool", "quoteAmount"],
+        });
+      }
     }
   });
 
@@ -175,6 +194,12 @@ export async function POST(req: Request) {
       pricingKey:
         parsed.data.service === "burn" && parsed.data.config.mode === "burn_earn"
           ? "burn_earn"
+          : undefined,
+      // Pool awal: fee pool (10 USDC) & gas-nya di-charge NANTI saat pool dibuat
+      // runner — tapi disurf check di muka agar user tahu totalnya sebelum bayar.
+      deferredServices:
+        parsed.data.service === "create_token" && "pool" in parsed.data.config && parsed.data.config.pool
+          ? ["create_pool"]
           : undefined,
     });
     return NextResponse.json({ order, reused });

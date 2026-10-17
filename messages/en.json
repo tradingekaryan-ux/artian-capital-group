@@ -132,7 +132,28 @@
     "processing": "Processing — your token will appear shortly.",
     "success": "Token created!",
     "viewToken": "View token page",
-    "insufficient": "Insufficient USDC balance. Top up first."
+    "insufficient": "Insufficient USDC balance. Top up first.",
+    "liquidityTitle": "Initial liquidity pool",
+    "liquidityAmount": "Liquidity (USDC)",
+    "lpShare": "Pool share",
+    "marketShare": "Market share",
+    "noPoolYet": "No pool at launch — you can add one later from the token page.",
+    "marketCapLaunch": "Market cap at launch",
+    "feeTitle": "Fees & gas",
+    "feeService": "Create token — service fee",
+    "feeGasCreate": "Gas — create token",
+    "feePool": "Create pool — service fee",
+    "feeGasPool": "Gas — create pool",
+    "feeLiquidity": "Initial liquidity (yours — goes into the pool)",
+    "chargedAfter": "The pool service fee + pool gas are charged automatically right after your token is confirmed.",
+    "totalFees": "Total fees",
+    "totalGas": "Total gas (estimate)",
+    "dueNow": "Due now",
+    "insufficientSol": "Insufficient SOL for network gas — top up at least {amount} SOL.",
+    "poolCreating": "Token created — creating your liquidity pool…",
+    "poolLive": "Your liquidity pool is live!",
+    "poolFailed": "Token created, but pool creation failed — the pool fee was refunded. You can create the pool from the token page.",
+    "poolSkipped": "Token created. The liquidity pool wasn't set up (your balance changed) — you can create the pool from the token page."
   },
   "token": {
     "price": "Price",
@@ -166,7 +187,8 @@
     "sortNew": "Newest",
     "sortTop": "Top gainers",
     "empty": "No tokens yet — be the first to launch one.",
-    "emptyAction": "Create one"
+    "emptyAction": "Create one",
+    "devnet": "Devnet"
   },
   "orders": {
     "title": "Your orders",
@@ -236,6 +258,7 @@
     "pricing": "Pricing",
     "jobs": "Job queue",
     "treasury": "Treasury",
+    "treasuryAddress": "Mainnet treasury address",
     "recentOrders": "Recent orders",
     "recentTokens": "User tokens",
     "recentWithdrawals": "User withdrawals",

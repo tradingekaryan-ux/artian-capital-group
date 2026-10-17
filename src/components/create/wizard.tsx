@@ -4,9 +4,15 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 import { Link } from "@/i18n/navigation";
 import { track } from "@/lib/analytics";
+import { formatNumber } from "@/lib/format";
 
 interface Props {
   priceUsdc: number;
+  /** Fee pembuatan pool (USDC) — di-charge otomatis setelah token confirmed. */
+  poolFeeUsdc: number;
+  /** Estimasi gas SOL per layanan (dari SOL_REQUIREMENT server). */
+  gasCreateSol: number;
+  gasPoolSol: number;
   /** `demo` (devnet) = order dibayar USDC devnet, hasil token devnet. */
   kind?: "mainnet" | "demo";
 }
@@ -43,18 +49,34 @@ const INITIAL: WizardState = {
   immutable: false,
 };
 
-export function CreateTokenWizard({ priceUsdc, kind = "mainnet" }: Props) {
+export function CreateTokenWizard({
+  priceUsdc,
+  poolFeeUsdc,
+  gasCreateSol,
+  gasPoolSol,
+  kind = "mainnet",
+}: Props) {
   const t = useTranslations("create");
   const tc = useTranslations("common");
+  const tt = useTranslations("token");
   const [step, setStep] = useState(0);
   const [state, setState] = useState<WizardState>(INITIAL);
   const [balance, setBalance] = useState<number | null>(null);
+  const [sol, setSol] = useState<number | null>(null);
+  // Liquidity pool awal: nominal USDC (±1 per klik) + rasio LP% (default 90/10).
+  const [lpUsdc, setLpUsdc] = useState(50);
+  const [lpPct, setLpPct] = useState(90);
+  const [wantedPool, setWantedPool] = useState(false);
+  const [poolId, setPoolId] = useState<string | null>(null);
+  const [poolStage, setPoolStage] = useState<"idle" | "pending" | "confirmed" | "failed" | "skipped">("idle");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [orderId, setOrderId] = useState<string | null>(null);
   const [orderStatus, setOrderStatus] = useState<string | null>(null);
   const [resultMint, setResultMint] = useState<string | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  // Niat pool saat submit — dibaca closure polling yang stabil (bukan state render).
+  const wantedPoolRef = useRef(false);
   // Idempotency: satu key per mount — klik ganda / retry jaringan tidak membuat 2 order.
   // Diisi lazily di handler submit (bukan saat render — aturan purity React).
   const idemRef = useRef("");
@@ -64,7 +86,11 @@ export function CreateTokenWizard({ priceUsdc, kind = "mainnet" }: Props) {
   const loadBalance = useCallback(() => {
     fetch("/api/wallet/balance")
       .then((r) => (r.ok ? r.json() : null))
-      .then((j) => j && setBalance(j.usdc))
+      .then((j) => {
+        if (!j) return;
+        if (typeof j.usdc === "number") setBalance(j.usdc);
+        if (typeof j.sol === "number") setSol(j.sol);
+      })
       .catch(() => {});
   }, []);
 
@@ -88,6 +114,8 @@ export function CreateTokenWizard({ priceUsdc, kind = "mainnet" }: Props) {
 
   function startPolling(id: string) {
     if (pollRef.current) clearInterval(pollRef.current);
+    let noPoolTicks = 0;
+    let tracked = false;
     pollRef.current = setInterval(async () => {
       try {
         const res = await fetch(`/api/orders/${id}`);
@@ -96,9 +124,38 @@ export function CreateTokenWizard({ priceUsdc, kind = "mainnet" }: Props) {
         const o = json.order;
         setOrderStatus(o.status);
         if (o.token?.mint) setResultMint(o.token.mint);
+        if (o.status === "confirmed" && !tracked) {
+          tracked = true;
+          track("token_created", { mint: o.token?.mint });
+        }
+
+        // Pool awal (bundling): pantau order pool yang dibuat runner setelah token confirmed.
+        if (o.status === "confirmed" && wantedPoolRef.current) {
+          const pid = (o.poolOrderId ?? null) as string | null;
+          if (pid) {
+            setPoolId(pid);
+            setPoolStage((s) => (s === "confirmed" || s === "failed" ? s : "pending"));
+            const pr = await fetch(`/api/orders/${pid}`);
+            if (pr.ok) {
+              const ps = (await pr.json()).order?.status;
+              if (ps === "confirmed" || ps === "failed" || ps === "refunded") {
+                setPoolStage(ps === "confirmed" ? "confirmed" : "failed");
+                if (pollRef.current) clearInterval(pollRef.current);
+              }
+            }
+            return;
+          }
+          // Runner belum sempat menulis poolOrderId (atau fee pool kurang).
+          noPoolTicks += 1;
+          if (noPoolTicks >= 6) {
+            setPoolStage("skipped");
+            if (pollRef.current) clearInterval(pollRef.current);
+          }
+          return;
+        }
+
         if (o.status === "confirmed" || o.status === "failed" || o.status === "refunded") {
           if (pollRef.current) clearInterval(pollRef.current);
-          if (o.status === "confirmed") track("token_created", { mint: o.token?.mint });
         }
       } catch {
         /* lanjut poll */
@@ -116,6 +173,9 @@ export function CreateTokenWizard({ priceUsdc, kind = "mainnet" }: Props) {
     setBusy(true);
     setError(null);
     try {
+      const wantsPool = lpUsdc > 0;
+      wantedPoolRef.current = wantsPool;
+      setWantedPool(wantsPool);
       const res = await fetch("/api/orders", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -129,6 +189,9 @@ export function CreateTokenWizard({ priceUsdc, kind = "mainnet" }: Props) {
             twitter: state.twitter || undefined,
             telegram: state.telegram || undefined,
             discord: state.discord || undefined,
+            ...(wantsPool
+              ? { pool: { quoteAmount: String(lpUsdc), lpPercentage: lpPct } }
+              : {}),
           },
         }),
       });
@@ -149,6 +212,7 @@ export function CreateTokenWizard({ priceUsdc, kind = "mainnet" }: Props) {
   if (orderId) {
     const confirmed = orderStatus === "confirmed";
     const failed = orderStatus === "failed" || orderStatus === "refunded";
+    const poolCreating = confirmed && wantedPool && (poolStage === "idle" || poolStage === "pending");
     return (
       <div className="card overflow-hidden text-center">
         <div className="chrome">
@@ -156,22 +220,44 @@ export function CreateTokenWizard({ priceUsdc, kind = "mainnet" }: Props) {
           <span className="text-muted-ink">order</span>
         </div>
         <div className="p-8">
-        {confirmed ? (
-          <>
-            <p className="display text-5xl text-[#15803d]">✓</p>
-            <h2 className="display mt-2 text-2xl">{t("success")}</h2>
-            {resultMint && (
-              <Link href={`/token/${resultMint}`} className="btn btn-primary mt-5 inline-flex">
-                {t("viewToken")}
-              </Link>
-            )}
-          </>
-        ) : failed ? (
+        {failed ? (
           <>
             <h2 className="display text-2xl text-[#b91c1c]">{tc("error")}</h2>
             <p className="mt-2 text-sm text-muted-ink">
               Order failed to process — funds were automatically refunded to your USDC balance.
             </p>
+          </>
+        ) : poolCreating ? (
+          <>
+            <div className="mx-auto h-10 w-10 animate-spin rounded-full border-[3px] border-black border-t-[#d8ff3e]" />
+            <p className="mt-4 text-sm font-semibold text-muted-ink">{t("poolCreating")}</p>
+            <p className="mono mt-1 text-xs text-muted-ink">
+              order {orderId.slice(0, 8)} · {orderStatus}
+              {poolId ? ` · pool ${poolId.slice(0, 8)}` : ""}
+            </p>
+          </>
+        ) : confirmed ? (
+          <>
+            <p className="display text-5xl text-[#15803d]">✓</p>
+            <h2 className="display mt-2 text-2xl">{t("success")}</h2>
+            {wantedPool && poolStage === "confirmed" && (
+              <p className="mt-2 text-sm font-bold text-[#15803d]">{t("poolLive")}</p>
+            )}
+            {wantedPool && poolStage === "failed" && (
+              <div className="mx-auto mt-4 max-w-md rounded-xl border-2 border-black bg-[#fef9c3] p-3 text-left text-xs font-semibold text-muted-ink">
+                {t("poolFailed")}
+              </div>
+            )}
+            {wantedPool && poolStage === "skipped" && (
+              <div className="mx-auto mt-4 max-w-md rounded-xl border-2 border-black bg-[#fef9c3] p-3 text-left text-xs font-semibold text-muted-ink">
+                {t("poolSkipped")}
+              </div>
+            )}
+            {resultMint && (
+              <Link href={`/token/${resultMint}`} className="btn btn-primary mt-5 inline-flex">
+                {t("viewToken")}
+              </Link>
+            )}
           </>
         ) : (
           <>
@@ -188,7 +274,20 @@ export function CreateTokenWizard({ priceUsdc, kind = "mainnet" }: Props) {
   }
 
   const steps = [t("step1"), t("step2"), t("step3"), t("step4")];
-  const insufficient = balance !== null && balance < priceUsdc;
+  // ── Rincian biaya (live) ──────────────────────────────────────────────
+  const poolActive = lpUsdc > 0;
+  const feeNow = priceUsdc;
+  const feeAfter = poolActive ? poolFeeUsdc : 0;
+  const totalUsdcFees = feeNow + feeAfter;
+  const totalGas = gasCreateSol + (poolActive ? gasPoolSol : 0);
+  const insuffUsdc = balance !== null && balance < totalUsdcFees;
+  const insuffSol = sol !== null && sol < totalGas;
+  const insufficient = insuffUsdc || insuffSol;
+  // ── Derivasi market dari stepper ──────────────────────────────────────
+  const supplyNum = Number(state.supply) || 0;
+  const poolTokens = (supplyNum * lpPct) / 100;
+  const initialPrice = poolTokens > 0 ? lpUsdc / poolTokens : 0;
+  const marketCap = lpPct > 0 ? (lpUsdc * 100) / lpPct : 0;
 
   return (
     <div className="card overflow-hidden">
@@ -353,6 +452,7 @@ export function CreateTokenWizard({ priceUsdc, kind = "mainnet" }: Props) {
 
       {step === 3 && (
         <div className="flex flex-col gap-4">
+          {/* rincian token */}
           <dl className="flex flex-col divide-y divide-black/10 rounded-xl border-2 border-black text-sm">
             <Row label={t("name")} value={state.name || "—"} />
             <Row label={t("symbol")} value={state.symbol || "—"} />
@@ -361,25 +461,125 @@ export function CreateTokenWizard({ priceUsdc, kind = "mainnet" }: Props) {
             <Row label={t("revokeMint")} value={state.revokeMint ? "✓" : "✗"} />
             <Row label={t("revokeFreeze")} value={state.revokeFreeze ? "✓" : "✗"} />
             <Row label={t("immutable")} value={state.immutable ? "✓" : "✗"} />
-            <Row label={t("price")} value={`${priceUsdc} USDC`} />
           </dl>
-          <div className="flex items-center justify-between text-xs font-semibold text-muted-ink">
+
+          {/* liquidity awal — stepper ±1 USDC + rasio LP% */}
+          <section className="rounded-xl border-2 border-black bg-[#f5f3ff] p-4">
+            <div className="flex items-center justify-between">
+              <h3 className="text-xs font-bold uppercase tracking-wide text-muted-ink">
+                {t("liquidityTitle")}
+              </h3>
+              <span className="mono text-[10px] font-bold uppercase text-muted-ink">
+                {kind === "demo" ? "devnet" : "mainnet"}
+              </span>
+            </div>
+            <div className="mt-3 flex items-center gap-3">
+              <button
+                type="button"
+                className="btn btn-secondary !px-4 !py-2"
+                onClick={() => setLpUsdc((v) => Math.max(0, v - 1))}
+                disabled={lpUsdc <= 0 || busy}
+                aria-label="minus 1 USDC"
+              >
+                −
+              </button>
+              <div className="mono flex-1 rounded-xl border-2 border-black bg-white px-3 py-2 text-center font-bold">
+                {lpUsdc} USDC
+              </div>
+              <button
+                type="button"
+                className="btn btn-secondary !px-4 !py-2"
+                onClick={() => setLpUsdc((v) => v + 1)}
+                disabled={busy}
+                aria-label="plus 1 USDC"
+              >
+                +
+              </button>
+            </div>
+            <div className="mt-4 flex items-center gap-3">
+              <input
+                id="c-lppct"
+                type="range"
+                min={1}
+                max={100}
+                value={lpPct}
+                onChange={(e) => setLpPct(Number(e.target.value))}
+                disabled={busy}
+                className="flex-1 accent-black"
+              />
+              <span className="mono w-20 text-right text-sm font-bold">{lpPct}% LP</span>
+            </div>
+            <p className="mt-1 text-xs text-muted-ink">
+              {t("lpShare")}: <strong>{lpPct}%</strong> · {t("marketShare")}:{" "}
+              <strong>{100 - lpPct}%</strong>
+              {poolActive && (
+                <>
+                  {" "}· Pool:{" "}
+                  <strong>
+                    {formatNumber(poolTokens)} {state.symbol || "tokens"}
+                  </strong>
+                </>
+              )}
+            </p>
+            {poolActive ? (
+              <dl className="mt-3 flex flex-col divide-y divide-black/10 rounded-xl border-2 border-black bg-white text-sm">
+                <Row label={tt("initialPrice")} value={`$${initialPrice.toExponential(3)}`} />
+                <Row label={t("marketCapLaunch")} value={`${formatNumber(marketCap)} USDC`} />
+              </dl>
+            ) : (
+              <p className="mt-3 text-xs font-semibold text-muted-ink">{t("noPoolYet")}</p>
+            )}
+          </section>
+
+          {/* rincian biaya & gas */}
+          <section className="rounded-xl border-2 border-black p-4">
+            <h3 className="text-xs font-bold uppercase tracking-wide text-muted-ink">
+              {t("feeTitle")}
+            </h3>
+            <dl className="mt-2 flex flex-col divide-y divide-black/10 text-sm">
+              <Row label={t("feeService")} value={`${feeNow} USDC`} />
+              <Row label={t("feeGasCreate")} value={`±${gasCreateSol} SOL`} />
+              {poolActive && <Row label={t("feePool")} value={`${feeAfter} USDC`} />}
+              {poolActive && <Row label={t("feeGasPool")} value={`±${gasPoolSol} SOL`} />}
+              {poolActive && <Row label={t("feeLiquidity")} value={`${lpUsdc} USDC`} />}
+              <Row label={t("totalFees")} value={`${totalUsdcFees} USDC`} />
+              <Row label={t("totalGas")} value={`±${totalGas} SOL`} />
+            </dl>
+            {poolActive && (
+              <p className="mt-2 text-[11px] font-semibold text-muted-ink">{t("chargedAfter")}</p>
+            )}
+          </section>
+
+          {/* saldo & bayar */}
+          <div className="flex flex-wrap items-center justify-between gap-2 text-xs font-semibold text-muted-ink">
             <span>
               {tc("usdcBalance")}:{" "}
-              <strong className={insufficient ? "text-[#b91c1c]" : "text-[#15803d]"}>
+              <strong className={insuffUsdc ? "text-[#b91c1c]" : "text-[#15803d]"}>
                 {balance === null ? "…" : balance}
               </strong>
+              {" · "}
+              {tc("solBalance")}:{" "}
+              <strong className={insuffSol ? "text-[#b91c1c]" : "text-[#15803d]"}>
+                {sol === null ? "…" : sol}
+              </strong>
             </span>
-            <span>{tc("networkFee")}</span>
+            <span className="mono">
+              {t("dueNow")}: {feeNow} USDC
+            </span>
           </div>
-          {insufficient && (
+          {insuffUsdc && (
             <Link href="/dashboard/wallet" className="text-sm font-bold underline decoration-2 underline-offset-2">
               {t("insufficient")}
             </Link>
           )}
+          {insuffSol && (
+            <p className="text-sm font-bold text-[#b91c1c]">
+              {t("insufficientSol", { amount: totalGas })}
+            </p>
+          )}
           {error && <p className="text-sm font-bold text-[#b91c1c]">{error}</p>}
           <button className="btn btn-primary" onClick={submit} disabled={busy || insufficient}>
-            {busy ? "…" : t("payCta")}
+            {busy ? "…" : `${t("payCta")} — ${feeNow} USDC`}
           </button>
         </div>
       )}

@@ -64,7 +64,14 @@ export default async function ExplorePage({
                     </div>
                   )}
                   <div className="min-w-0">
-                    <p className="truncate font-bold">{item.name}</p>
+                    <div className="flex items-center gap-2">
+                      <p className="truncate font-bold">{item.name}</p>
+                      {item.kind === "demo" && (
+                        <span className="shrink-0 rounded-full border-2 border-black bg-[#ede9fe] px-1.5 py-0.5 text-[9px] font-bold uppercase">
+                          {t("devnet")}
+                        </span>
+                      )}
+                    </div>
                     <p className="text-xs font-bold uppercase text-muted-ink">${item.symbol}</p>
                   </div>
                 </div>
@@ -111,6 +118,7 @@ interface TokenItem {
   mint: string;
   name: string;
   symbol: string;
+  kind: string;
   logo_uri: string | null;
   price_usd: number | null;
   liquidity_usd: number | null;
@@ -121,11 +129,11 @@ async function loadTokens(rawQ: string, sort: "new" | "top"): Promise<TokenItem[
   try {
     const q = sanitizeSearchQuery(rawQ);
     const db = supabaseAdmin();
+    // Mainnet & devnet sama-sama tampil — token devnet diberi label "Devnet".
     let query = db
       .from("tokens")
-      .select("mint, name, symbol, logo_uri, created_at")
+      .select("mint, name, symbol, kind, logo_uri, created_at")
       .eq("status", "live")
-      .eq("kind", "mainnet")
       .order("created_at", { ascending: false })
       .limit(90);
     if (q) {
@@ -163,6 +171,7 @@ async function loadTokens(rawQ: string, sort: "new" | "top"): Promise<TokenItem[
         mint: t.mint,
         name: t.name,
         symbol: t.symbol,
+        kind: t.kind ?? "mainnet",
         logo_uri: t.logo_uri,
         price_usd: l?.price ?? null,
         liquidity_usd: l?.liq ?? null,

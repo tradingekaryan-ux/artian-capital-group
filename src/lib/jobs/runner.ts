@@ -31,13 +31,22 @@ import {
 } from "@/lib/jobs/queue";
 import { fetchMarketSummary, saveSnapshot } from "@/lib/market";
 import { uiToRaw, withdrawFeeRaw } from "@/lib/payment/pricing";
-import { failOrder } from "@/lib/payment/orders";
+import { failOrder, createAndPayOrder } from "@/lib/payment/orders";
 import type { WalletRow } from "@/lib/solana/wallet";
 
 type Handler = (payload: Record<string, unknown>) => Promise<void>;
 
 function num(v: unknown): bigint {
   return BigInt(String(v ?? 0));
+}
+
+/** bigint raw → string desimal presisi-ekak (amount pool dihitung dari supply × LP%). */
+function rawToDecimal(raw: bigint, decimals: number): string {
+  if (decimals <= 0) return raw.toString();
+  const s = raw.toString().padStart(decimals + 1, "0");
+  const int = s.slice(0, -decimals);
+  const frac = s.slice(-decimals).replace(/0+$/, "");
+  return frac ? `${int}.${frac}` : int;
 }
 
 /** Jenis jaringan sebuah order: payload job → kolom order → default mainnet. */
@@ -86,6 +95,7 @@ async function handleCreateToken(payload: Record<string, unknown>): Promise<void
       .from("orders")
       .update({ status: "confirmed", tx_signature: existingToken.created_tx ?? null })
       .eq("id", orderId);
+    await chainInitialPool(order, payload);
     return;
   }
   await db.from("orders").update({ status: "processing" }).eq("id", orderId);
@@ -176,6 +186,78 @@ async function handleCreateToken(payload: Record<string, unknown>): Promise<void
     target: result.mint,
     payload: { orderId },
   });
+  await chainInitialPool(order, payload);
+}
+
+/**
+ * Bundling wizard: bila order create_token membawa `config.pool`, buat pool
+ * SEGERA setelah token confirmed — fee pool (10 USDC) + gas di-charge di sini
+ * (satu transfer terpisah, idempotencyKey per order token → tidak dobel).
+ * Gagal (mis. saldo berubah) TIDAK menggagalkan token: user bisa create pool
+ * manual dari halaman token.
+ */
+async function chainInitialPool(
+  order: { id: string; user_id: string; kind?: string | null; config: unknown },
+  payload?: Record<string, unknown>,
+): Promise<void> {
+  const cfg = order.config as {
+    supply?: string;
+    decimals?: number;
+    pool?: { quoteAmount: string; lpPercentage: number; feeBps?: number };
+    poolOrderId?: string;
+  };
+  if (!cfg.pool || cfg.poolOrderId || !cfg.supply) return;
+  try {
+    const db = supabaseAdmin();
+    const { data: token } = await db
+      .from("tokens")
+      .select("id")
+      .eq("order_id", order.id)
+      .maybeSingle();
+    if (!token) return;
+
+    // tokenAmount = supply × LP% — presisi bigint, bukan Number.
+    const decimals = cfg.decimals ?? 9;
+    const supplyRaw = uiToRaw(cfg.supply, decimals);
+    const tokenAmount = rawToDecimal((supplyRaw * BigInt(cfg.pool.lpPercentage)) / 100n, decimals);
+
+    const kind = orderKind(order, payload);
+    const { order: poolOrder, reused } = await createAndPayOrder({
+      userId: order.user_id,
+      service: "create_pool",
+      kind,
+      config: {
+        tokenId: token.id,
+        lpPercentage: cfg.pool.lpPercentage,
+        tokenAmount,
+        quoteAmount: cfg.pool.quoteAmount,
+        feeBps: cfg.pool.feeBps ?? 25,
+      },
+      idempotencyKey: `pool-${order.id}`,
+    });
+
+    // Back-reference: UI (wizard) memantau pool dari order token.
+    const { data: fresh } = await db.from("orders").select("config").eq("id", order.id).maybeSingle();
+    await db
+      .from("orders")
+      .update({
+        config: {
+          ...((fresh?.config as Record<string, unknown>) ?? {}),
+          poolOrderId: poolOrder.id,
+        },
+      })
+      .eq("id", order.id);
+    if (!reused) {
+      await audit({
+        actor: order.user_id,
+        action: "pool_order_created",
+        target: poolOrder.id,
+        payload: { fromOrder: order.id },
+      });
+    }
+  } catch (e) {
+    console.warn("[runner] auto initial pool skipped:", e instanceof Error ? e.message : e);
+  }
 }
 
 /* ───────────────── create_pool ───────────────── */

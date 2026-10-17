@@ -1,0 +1,12 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "artian-cron",
+  "main": "index.js",
+  "compatibility_date": "2026-10-01",
+  "triggers": {
+    "crons": ["* * * * *"]
+  },
+  "vars": {
+    "ARTIAN_ORIGIN": "https://artian-capital-group.trading-ekaryan.workers.dev"
+  }
+}

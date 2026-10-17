@@ -2,8 +2,8 @@ import { NextResponse } from "next/server";
 import { SECRETS } from "@/lib/config";
 
 /**
- * Endpoint job runner untuk GitHub Actions cron / curl lokal.
- * Auth: `Authorization: Bearer $CRON_SECRET`
+ * Endpoint job runner — dipanggil Cloudflare Cron Trigger `artian-cron`
+ * tiap menit (fallback manual: GitHub Actions / curl) via `Authorization: Bearer $CRON_SECRET`.
  */
 export async function POST(req: Request) {
   const auth = req.headers.get("authorization") ?? "";

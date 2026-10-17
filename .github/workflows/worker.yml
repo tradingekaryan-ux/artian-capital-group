@@ -1,13 +1,12 @@
 name: Job Worker
 
-# Menjalankan job queue (pembuatan token, pool, withdrawal, dsb.) tiap menit.
+# Menjalankan job queue manual (fallback) — schedule 1 menit sudah dipindah ke
+# Cloudflare Cron Trigger (worker `artian-cron`, cron-worker/).
 # Butuh repository secrets:
 #   SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, WALLET_MASTER_KEY,
 #   TREASURY_SECRET_KEY, NEXT_PUBLIC_RPC_URL (opsional), HELIUS_API_KEY (opsional)
 
 on:
-  schedule:
-    - cron: "* * * * *"
   workflow_dispatch:
 
 jobs:
