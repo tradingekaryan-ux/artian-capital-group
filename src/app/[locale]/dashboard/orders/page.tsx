@@ -1,6 +1,7 @@
 import { getTranslations, setRequestLocale } from "next-intl/server";
 import { requireUser, supabaseAdmin } from "@/lib/db/client";
 import { formatUsdc, formatDate } from "@/lib/format";
+import { getActiveWallet } from "@/lib/solana/wallet";
 
 const STATUS_STYLE: Record<string, string> = {
   draft: "text-muted-ink",
@@ -19,11 +20,15 @@ export default async function OrdersPage({ params }: PageProps<"/[locale]/dashbo
   const user = await requireUser();
   if (!user) return null;
 
+  const active = await getActiveWallet(user.id).catch(() => null);
+  const kind = active?.kind ?? ("mainnet" as const);
+
   const db = supabaseAdmin();
   const { data: orders } = await db
     .from("orders")
     .select("id, service, amount_raw, status, created_at, payment_signature, error")
     .eq("user_id", user.id)
+    .eq("kind", kind)
     .order("created_at", { ascending: false })
     .limit(50);
 
@@ -32,6 +37,11 @@ export default async function OrdersPage({ params }: PageProps<"/[locale]/dashbo
       <div className="chrome">
         <span className="chrome-dots"><span /><span /><span /></span>
         <span className="text-muted-ink">{t("title")}</span>
+        {kind === "demo" && (
+          <span className="rounded-full border-2 border-black bg-[#d8ff3e] px-2 py-0.5 text-[10px] font-bold uppercase">
+            Demo · devnet
+          </span>
+        )}
       </div>
       <div className="overflow-x-auto p-5">
       {!orders?.length ? (

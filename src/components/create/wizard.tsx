@@ -7,6 +7,8 @@ import { track } from "@/lib/analytics";
 
 interface Props {
   priceUsdc: number;
+  /** `demo` (devnet) = order dibayar USDC devnet, hasil token devnet. */
+  kind?: "mainnet" | "demo";
 }
 
 interface WizardState {
@@ -41,7 +43,7 @@ const INITIAL: WizardState = {
   immutable: false,
 };
 
-export function CreateTokenWizard({ priceUsdc }: Props) {
+export function CreateTokenWizard({ priceUsdc, kind = "mainnet" }: Props) {
   const t = useTranslations("create");
   const tc = useTranslations("common");
   const [step, setStep] = useState(0);
@@ -119,6 +121,7 @@ export function CreateTokenWizard({ priceUsdc }: Props) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           service: "create_token",
+          kind,
           idempotencyKey: idemRef.current,
           config: {
             ...state,
@@ -192,8 +195,19 @@ export function CreateTokenWizard({ priceUsdc }: Props) {
       <div className="chrome">
         <span className="chrome-dots"><span /><span /><span /></span>
         <span className="text-muted-ink">step {step + 1}/4</span>
+        {kind === "demo" && (
+          <span className="rounded-full border-2 border-black bg-[#d8ff3e] px-2 py-0.5 text-[10px] font-bold uppercase">
+            Demo · devnet
+          </span>
+        )}
       </div>
       <div className="p-6">
+      {kind === "demo" && (
+        <p className="mb-4 rounded-xl border-2 border-black bg-[#ede9fe] p-3 text-xs font-bold text-muted-ink">
+          Kamu membuat token di DEVNET (demo). Token ini tidak memiliki nilai nyata —
+          untuk latihan sebelum melakukan di mainnet.
+        </p>
+      )}
       {/* progress */}
       <ol className="mb-6 flex gap-2 text-[11px] font-bold uppercase tracking-wide">
         {steps.map((label, i) => (

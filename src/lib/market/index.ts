@@ -15,6 +15,7 @@ async function fetchOnChainPoolSummary(
       .from("pools")
       .select("pool_id, tokens!inner(decimals, supply)")
       .eq("status", "active")
+      .eq("kind", "mainnet")
       .eq("tokens.mint", mint)
       .limit(1)
       .maybeSingle();

@@ -14,7 +14,7 @@ import type {
 } from "@raydium-io/raydium-sdk-v2";
 import { getConnection, rpcRead } from "@/lib/solana/connection";
 import { getTreasury } from "@/lib/chain/usdc";
-import { IS_MAINNET } from "@/lib/config";
+import { clusterFor, type WalletKind } from "@/lib/config";
 
 /**
  * Modul Liquidity Pool — Raydium CPMM (Standard AMM).
@@ -29,22 +29,31 @@ import { IS_MAINNET } from "@/lib/config";
 
 const COMPUTE_BUDGET = { units: 600_000, microLamports: 100_000 } as const;
 
-async function initRaydium(owner: Keypair) {
+/** Raydium hanya mengenali "mainnet" | "devnet" (cluster utama live bisa devnet saat pengembangan). */
+function raydiumCluster(kind: WalletKind): "mainnet" | "devnet" {
+  return clusterFor(kind) === "mainnet-beta" ? "mainnet" : "devnet";
+}
+
+async function initRaydium(owner: Keypair, kind: WalletKind = "mainnet") {
   return Raydium.load({
-    connection: getConnection(),
+    connection: getConnection(kind),
     owner,
-    cluster: IS_MAINNET ? "mainnet" : "devnet",
+    cluster: raydiumCluster(kind),
     blockhashCommitment: "confirmed",
     disableFeatureCheck: true,
   });
 }
 
-function cpmmProgramId(): PublicKey {
-  return IS_MAINNET ? CREATE_CPMM_POOL_PROGRAM : DEVNET_PROGRAM_ID.CREATE_CPMM_POOL_PROGRAM;
+function cpmmProgramId(kind: WalletKind = "mainnet"): PublicKey {
+  return raydiumCluster(kind) === "mainnet"
+    ? CREATE_CPMM_POOL_PROGRAM
+    : DEVNET_PROGRAM_ID.CREATE_CPMM_POOL_PROGRAM;
 }
 
-function cpmmFeeAccount(): PublicKey {
-  return IS_MAINNET ? CREATE_CPMM_POOL_FEE_ACC : DEVNET_PROGRAM_ID.CREATE_CPMM_POOL_FEE_ACC;
+function cpmmFeeAccount(kind: WalletKind = "mainnet"): PublicKey {
+  return raydiumCluster(kind) === "mainnet"
+    ? CREATE_CPMM_POOL_FEE_ACC
+    : DEVNET_PROGRAM_ID.CREATE_CPMM_POOL_FEE_ACC;
 }
 
 export interface CreatePoolParams {
@@ -62,8 +71,11 @@ export interface CreatePoolResult {
   txSignature?: string;
 }
 
-export async function createCpmmPool(p: CreatePoolParams): Promise<CreatePoolResult> {
-  const raydium = await initRaydium(p.owner);
+export async function createCpmmPool(
+  p: CreatePoolParams,
+  kind: WalletKind = "mainnet",
+): Promise<CreatePoolResult> {
+  const raydium = await initRaydium(p.owner, kind);
 
   // fee tier dari API (tradeFeeRate dalam satuan 1e6 → 2500 = 0.25%)
   const configs = await raydium.api.getCpmmConfigs();
@@ -78,16 +90,16 @@ export async function createCpmmPool(p: CreatePoolParams): Promise<CreatePoolRes
   // Builder Raydium bermasalah dgn feePayer asing (akun user ter-mark readonly
   // → PrivilegeEscalation). Pakai feePayer default = owner; user dibekali
   // sedikit SOL oleh treasury (boros ≤0.001 SOL per pool).
-  const userSol = await rpcRead((c) => c.getBalance(p.owner.publicKey));
+  const userSol = await rpcRead((c) => c.getBalance(p.owner.publicKey), kind);
   // CPMM creation fee protocol 0.15 SOL + rent akun (boros — hanya devnet/mainnet).
   if (userSol < 260_000_000) {
     const { gasDrop } = await import("@/lib/chain/swap");
-    await gasDrop(p.owner.publicKey.toBase58(), 250_000_000);
+    await gasDrop(p.owner.publicKey.toBase58(), 250_000_000, kind);
   }
 
   const built = await raydium.cpmm.createPool({
-    programId: cpmmProgramId(),
-    poolFeeAccount: cpmmFeeAccount(),
+    programId: cpmmProgramId(kind),
+    poolFeeAccount: cpmmFeeAccount(kind),
     mintA,
     mintB,
     mintAAmount: new BN(p.baseAmountRaw.toString()),
@@ -130,8 +142,12 @@ export interface PoolContext {
 /**
  * Ambil konteks pool dari RPC (API publik tidak mendukung pool devnet).
  */
-export async function getPoolContext(owner: Keypair, poolId: string): Promise<PoolContext> {
-  const raydium = await initRaydium(owner);
+export async function getPoolContext(
+  owner: Keypair,
+  poolId: string,
+  kind: WalletKind = "mainnet",
+): Promise<PoolContext> {
+  const raydium = await initRaydium(owner, kind);
   const ctx = await raydium.cpmm.getPoolInfoFromRpc(poolId);
   return { poolInfo: ctx.poolInfo, poolKeys: ctx.poolKeys };
 }
@@ -147,9 +163,12 @@ export interface PoolInfoLite {
   raw: unknown;
 }
 
-export async function fetchPoolInfo(poolId: string): Promise<PoolInfoLite | null> {
+export async function fetchPoolInfo(
+  poolId: string,
+  kind: WalletKind = "mainnet",
+): Promise<PoolInfoLite | null> {
   try {
-    const raydium = await initRaydium(getTreasury());
+    const raydium = await initRaydium(getTreasury(kind), kind);
     const { poolInfo, poolKeys } = await raydium.cpmm.getPoolInfoFromRpc(poolId);
     const raw = poolInfo as unknown as {
       mintA: { address: string };
@@ -162,8 +181,8 @@ export async function fetchPoolInfo(poolId: string): Promise<PoolInfoLite | null
     const vaultB = String(vault.B ?? vault.vaultB ?? "");
     if (!vaultA || !vaultB) return null;
     const [a, b] = await Promise.all([
-      rpcRead((c) => c.getTokenAccountBalance(new PublicKey(vaultA))),
-      rpcRead((c) => c.getTokenAccountBalance(new PublicKey(vaultB))),
+      rpcRead((c) => c.getTokenAccountBalance(new PublicKey(vaultA)), kind),
+      rpcRead((c) => c.getTokenAccountBalance(new PublicKey(vaultB)), kind),
     ]);
     return {
       poolId,
@@ -186,9 +205,11 @@ export async function addLiquidity(params: {
   inputAmountRaw: bigint; // salah satu sisi (baseIn menentukan sisi mana)
   baseIn: boolean;
   slippagePercent?: number;
+  kind?: WalletKind;
 }): Promise<{ txSignature?: string; lpAmount?: string }> {
-  const raydium = await initRaydium(params.owner);
-  const { poolInfo, poolKeys } = await getPoolContext(params.owner, params.poolId);
+  const kind = params.kind ?? "mainnet";
+  const raydium = await initRaydium(params.owner, kind);
+  const { poolInfo, poolKeys } = await getPoolContext(params.owner, params.poolId, kind);
   const { execute, extInfo } = await raydium.cpmm.addLiquidity({
     poolInfo,
     poolKeys,
@@ -211,9 +232,11 @@ export async function removeLiquidity(params: {
   poolId: string;
   lpAmountRaw: bigint;
   slippagePercent?: number;
+  kind?: WalletKind;
 }): Promise<{ txSignature?: string }> {
-  const raydium = await initRaydium(params.owner);
-  const { poolInfo, poolKeys } = await getPoolContext(params.owner, params.poolId);
+  const kind = params.kind ?? "mainnet";
+  const raydium = await initRaydium(params.owner, kind);
+  const { poolInfo, poolKeys } = await getPoolContext(params.owner, params.poolId, kind);
   const { execute } = await raydium.cpmm.withdrawLiquidity({
     poolInfo,
     poolKeys,

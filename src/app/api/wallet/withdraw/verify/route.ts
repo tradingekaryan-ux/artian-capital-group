@@ -48,13 +48,17 @@ export async function POST(req: Request) {
     .eq("id", id)
     .eq("user_id", user.id)
     .eq("status", "pending")
-    .select("id")
+    .select("id, wallet_id")
     .maybeSingle();
   if (!updated) {
     return NextResponse.json({ error: "Penarikan tidak dalam status pending" }, { status: 409 });
   }
 
-  await enqueue("withdraw", { withdrawalId: id, userId: user.id });
+  await enqueue("withdraw", {
+    withdrawalId: id,
+    userId: user.id,
+    walletId: updated.wallet_id ?? null,
+  });
   await audit({
     actor: user.id,
     action: "withdraw_confirmed",

@@ -5,10 +5,13 @@ import { createAndPayOrder, OrderError } from "@/lib/payment/orders";
 import { uiToRaw } from "@/lib/payment/pricing";
 import { rateLimit, clientIp } from "@/lib/security/ratelimit";
 import { audit } from "@/lib/security/audit";
-import { LIMITS } from "@/lib/config";
+import { LIMITS, type WalletKind } from "@/lib/config";
 
 /** Amount desimal-positif (string) — divalidasi presisi + batas u64 oleh uiToRaw. */
 const amountString = z.string().regex(/^\d+(\.\d+)?$/, "jumlah tidak valid");
+
+/** Wallet aktif order: mainnet (default) atau demo (devnet, USDC devnet). */
+const kindField = z.enum(["mainnet", "demo"]).default("mainnet");
 
 const createTokenSchema = z
   .object({
@@ -35,6 +38,7 @@ const createTokenSchema = z
       revokeFreeze: z.boolean().default(true),
       immutable: z.boolean().default(false),
     }),
+    kind: kindField,
     idempotencyKey: z.string().max(100).optional(),
   })
   .superRefine((data, ctx) => {
@@ -61,6 +65,7 @@ const createPoolSchema = z
       quoteMint: z.string().optional(),
       feeBps: z.number().int().min(1).max(100).optional(),
     }),
+    kind: kindField,
     idempotencyKey: z.string().max(100).optional(),
   })
   .superRefine((data, ctx) => {
@@ -83,6 +88,7 @@ const addLiquiditySchema = z.object({
     inputAmountRaw: z.string().refine((v) => /^\d+$/.test(v) && BigInt(v) > 0n, "jumlah tidak valid"),
     baseIn: z.boolean(),
   }),
+  kind: kindField,
   idempotencyKey: z.string().max(100).optional(),
 });
 
@@ -92,6 +98,7 @@ const removeLiquiditySchema = z.object({
     poolId: z.string().uuid(),
     lpAmountRaw: z.string().refine((v) => /^\d+$/.test(v) && BigInt(v) > 0n, "jumlah tidak valid"),
   }),
+  kind: kindField,
   idempotencyKey: z.string().max(100).optional(),
 });
 
@@ -130,7 +137,7 @@ export async function POST(req: Request) {
     );
   }
 
-  // Otorisasi resource: pastikan asset milik user ini.
+  // Otorisasi resource: pastikan asset milik user ini & jenis wallet cocok.
   const authError = await authorizeConfig(user.id, parsed.data);
   if (authError) return NextResponse.json({ error: authError }, { status: 403 });
 
@@ -141,6 +148,7 @@ export async function POST(req: Request) {
       config: parsed.data.config as Record<string, unknown>,
       idempotencyKey: parsed.data.idempotencyKey,
       ip,
+      kind: parsed.data.kind as WalletKind,
     });
     return NextResponse.json({ order, reused });
   } catch (e) {
@@ -167,23 +175,34 @@ async function authorizeConfig(
 ): Promise<string | null> {
   const { supabaseAdmin } = await import("@/lib/db/client");
   const db = supabaseAdmin();
+  const kind = data.kind ?? "mainnet";
   if (data.service === "create_pool") {
     const { data: token } = await db
       .from("tokens")
-      .select("id, user_id")
+      .select("id, user_id, kind")
       .eq("id", data.config.tokenId)
       .maybeSingle();
     if (!token) return "Token tidak ditemukan";
     if (token.user_id !== userId) return "Bukan token milikmu";
+    if (token.kind !== kind) {
+      return kind === "demo"
+        ? "Token ini bukan token demo — buat token baru lewat wallet demo."
+        : "Token ini token demo — pindah ke wallet demo untuk mengelolanya.";
+    }
   }
   if (data.service === "add_liquidity" || data.service === "remove_liquidity") {
     const { data: pool } = await db
       .from("pools")
-      .select("id, user_id, pool_id")
+      .select("id, user_id, pool_id, kind")
       .eq("id", data.config.poolId)
       .maybeSingle();
     if (!pool?.pool_id) return "Pool tidak ditemukan";
     if (pool.user_id !== userId) return "Bukan pool milikmu";
+    if (pool.kind !== kind) {
+      return kind === "demo"
+        ? "Pool ini bukan pool demo."
+        : "Pool ini pool demo — kelola lewat wallet demo.";
+    }
   }
   return null;
 }

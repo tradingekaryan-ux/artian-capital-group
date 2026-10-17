@@ -2,7 +2,14 @@ import { PublicKey } from "@solana/web3.js";
 import { Keypair } from "@solana/web3.js";
 import { supabaseAdmin } from "@/lib/db/client";
 import { audit } from "@/lib/security/audit";
-import { getWalletKeypair, refreshBalance, usdcAta } from "@/lib/solana/wallet";
+import {
+  getWalletKeypair,
+  refreshBalance,
+  usdcAta,
+  ensureWallet,
+  getWalletById,
+} from "@/lib/solana/wallet";
+import { keypairFromEncrypted } from "@/lib/solana/keypair";
 import { getTreasury, sendUsdcTransfer, usdcAtaOf } from "@/lib/chain/usdc";
 import { createSplToken } from "@/lib/chain/token-create";
 import { uploadTokenAssets } from "@/lib/chain/assets";
@@ -13,7 +20,7 @@ import {
 } from "@/lib/chain/pool";
 import { executeSwapToUsdc, gasDrop } from "@/lib/chain/swap";
 import { rpcRead } from "@/lib/solana/connection";
-import { SOL_MINT, USDC_MINT, LAMPORTS_PER_SOL } from "@/lib/config";
+import { SOL_MINT, usdcMintFor, LAMPORTS_PER_SOL, type WalletKind } from "@/lib/config";
 import {
   completeJob,
   claimPendingJobs,
@@ -25,11 +32,39 @@ import {
 import { fetchMarketSummary, saveSnapshot } from "@/lib/market";
 import { rawToUsdc, uiToRaw, withdrawFeeRaw } from "@/lib/payment/pricing";
 import { failOrder } from "@/lib/payment/orders";
+import type { WalletRow } from "@/lib/solana/wallet";
 
 type Handler = (payload: Record<string, unknown>) => Promise<void>;
 
 function num(v: unknown): bigint {
   return BigInt(String(v ?? 0));
+}
+
+/** Jenis jaringan sebuah order: payload job → kolom order → default mainnet. */
+function orderKind(order: { kind?: string | null }, payload?: Record<string, unknown>): WalletKind {
+  const fromPayload = payload?.kind;
+  if (fromPayload === "demo" || fromPayload === "mainnet") return fromPayload;
+  return order.kind === "demo" ? "demo" : "mainnet";
+}
+
+/** Wallet pemilik order (prefer wallet_id; fallback wallet per-kind). */
+async function walletForOrder(
+  order: { user_id: string; wallet_id?: string | null },
+  kind: WalletKind,
+): Promise<WalletRow> {
+  if (order.wallet_id) {
+    const row = await getWalletById(String(order.wallet_id));
+    if (row) return row;
+  }
+  return ensureWallet(order.user_id, kind);
+}
+
+/** Keypair wallet pemilik order (terdekripsi sesaat di memori server). */
+async function keypairForOrder(
+  order: { user_id: string; wallet_id?: string | null },
+  kind: WalletKind,
+): Promise<Keypair> {
+  return keypairFromEncrypted(await walletForOrder(order, kind));
 }
 
 /* ───────────────── create_token ───────────────── */
@@ -71,7 +106,8 @@ async function handleCreateToken(payload: Record<string, unknown>): Promise<void
     immutable?: boolean;
   };
 
-  const owner = await getWalletKeypair(order.user_id);
+  const kind = orderKind(order, payload);
+  const owner = await keypairForOrder(order, kind);
   const mint = Keypair.generate();
   const { logoUri, metadataUri } = await uploadTokenAssets(order.user_id, {
     name: cfg.name,
@@ -87,21 +123,27 @@ async function handleCreateToken(payload: Record<string, unknown>): Promise<void
   const decimals = cfg.decimals ?? 9;
   const supplyRaw = uiToRaw(cfg.supply, decimals); // presisi eksak — tanpa Number
 
-  const result = await createSplToken({
-    mint,
-    owner,
-    decimals,
-    supplyRaw,
-    metadataUri,
-    name: cfg.name,
-    symbol: cfg.symbol,
-    revokeMintAuthority: cfg.revokeMint ?? true,
-    revokeFreezeAuthority: cfg.revokeFreeze ?? true,
-    immutableMetadata: cfg.immutable ?? false,
-  });
+  const result = await createSplToken(
+    {
+      mint,
+      owner,
+      decimals,
+      supplyRaw,
+      metadataUri,
+      name: cfg.name,
+      symbol: cfg.symbol,
+      revokeMintAuthority: cfg.revokeMint ?? true,
+      revokeFreezeAuthority: cfg.revokeFreeze ?? true,
+      immutableMetadata: cfg.immutable ?? false,
+    },
+    kind,
+  );
 
+  const wallet = await walletForOrder(order, kind);
   await db.from("tokens").insert({
     user_id: order.user_id,
+    wallet_id: wallet.id,
+    kind,
     mint: result.mint,
     order_id: orderId,
     name: cfg.name,
@@ -169,22 +211,30 @@ async function handleCreatePool(payload: Record<string, unknown>): Promise<void>
   const { data: token } = await db.from("tokens").select("*").eq("id", cfg.tokenId).single();
   if (!token) throw new Error("token tidak ditemukan");
 
-  const owner = await getWalletKeypair(order.user_id);
-  const quoteMint = new PublicKey(cfg.quoteMint ?? USDC_MINT);
+  const kind = orderKind(order, payload);
+  const owner = await keypairForOrder(order, kind);
+  const quoteMint = new PublicKey(cfg.quoteMint ?? usdcMintFor(kind));
   const baseMint = new PublicKey(token.mint);
   const decimals = token.decimals as number;
+  const quoteDecimals = quoteMint.toBase58() === usdcMintFor(kind) ? 6 : 9;
 
-  const result = await createCpmmPool({
-    owner,
-    baseMint,
-    quoteMint,
-    baseAmountRaw: uiToRaw(cfg.tokenAmount, decimals),
-    quoteAmountRaw: uiToRaw(cfg.quoteAmount, quoteMint.toBase58() === USDC_MINT ? 6 : 9),
-    feeBps: cfg.feeBps ?? 25,
-  });
+  const result = await createCpmmPool(
+    {
+      owner,
+      baseMint,
+      quoteMint,
+      baseAmountRaw: uiToRaw(cfg.tokenAmount, decimals),
+      quoteAmountRaw: uiToRaw(cfg.quoteAmount, quoteDecimals),
+      feeBps: cfg.feeBps ?? 25,
+    },
+    kind,
+  );
 
+  const wallet = await walletForOrder(order, kind);
   await db.from("pools").insert({
     user_id: order.user_id,
+    wallet_id: wallet.id,
+    kind,
     token_id: cfg.tokenId,
     order_id: orderId,
     dex: "raydium_cpmm",
@@ -216,12 +266,14 @@ async function handleAddLiquidity(payload: Record<string, unknown>): Promise<voi
   const { data: pool } = await db.from("pools").select("*").eq("id", cfg.poolId).single();
   if (!pool?.pool_id) throw new Error("pool tidak valid");
 
-  const owner = await getWalletKeypair(order.user_id);
+  const kind = orderKind(order, payload);
+  const owner = await keypairForOrder(order, kind);
   const res = await poolAddLiquidity({
     owner,
     poolId: pool.pool_id,
     inputAmountRaw: num(cfg.inputAmountRaw),
     baseIn: cfg.baseIn,
+    kind,
   });
 
   await db.from("pool_positions").upsert(
@@ -248,11 +300,13 @@ async function handleRemoveLiquidity(payload: Record<string, unknown>): Promise<
   const { data: pool } = await db.from("pools").select("*").eq("id", cfg.poolId).single();
   if (!pool?.pool_id) throw new Error("pool tidak valid");
 
-  const owner = await getWalletKeypair(order.user_id);
+  const kind = orderKind(order, payload);
+  const owner = await keypairForOrder(order, kind);
   const res = await poolRemoveLiquidity({
     owner,
     poolId: pool.pool_id,
     lpAmountRaw: num(cfg.lpAmountRaw),
+    kind,
   });
   await db
     .from("orders")
@@ -260,7 +314,7 @@ async function handleRemoveLiquidity(payload: Record<string, unknown>): Promise<
     .eq("id", orderId);
 }
 
-/* ───────────────── withdraw ───────────────── */
+/* ───────────────── withdraw (hanya mainnet/live) ───────────────── */
 async function handleWithdraw(payload: Record<string, unknown>): Promise<void> {
   const db = supabaseAdmin();
   const withdrawalId = String(payload.withdrawalId);
@@ -268,9 +322,15 @@ async function handleWithdraw(payload: Record<string, unknown>): Promise<void> {
   if (!w || w.status === "confirmed" || w.status === "failed") return;
   await db.from("withdrawals").update({ status: "processing" }).eq("id", withdrawalId);
 
-  const owner = await getWalletKeypair(w.user_id);
+  // Wallet sumber dana = yang tercatat saat request (kolom withdrawals.wallet_id),
+  // fallback payload, fallback wallet mainnet tertua (data lama).
+  const walletId = (payload.walletId as string | null | undefined) ?? w.wallet_id ?? null;
+  const walletRow = walletId ? await getWalletById(String(walletId)) : null;
+  const owner = walletRow
+    ? keypairFromEncrypted(walletRow)
+    : await getWalletKeypair(w.user_id, "mainnet");
   const destination = new PublicKey(w.destination as string);
-  const treasury = getTreasury();
+  const treasury = getTreasury("mainnet");
 
   // 1) Fee flat → treasury (DIKUMPULKAN — sebelumnya fee tidak pernah ditarik).
   //    Idempotensi: fee_tx dicatat; retry melewati langkah ini bila sudah terkirim.
@@ -283,6 +343,7 @@ async function handleWithdraw(payload: Record<string, unknown>): Promise<void> {
       amountRaw: feeRaw,
       feePayer: treasury,
       skipCreateDestAta: true, // ATA treasury pasti ada
+      kind: "mainnet",
     });
     await db
       .from("withdrawals")
@@ -296,6 +357,7 @@ async function handleWithdraw(payload: Record<string, unknown>): Promise<void> {
     toOwner: destination,
     amountRaw: BigInt(w.amount_raw as string),
     feePayer: treasury,
+    kind: "mainnet",
   });
   await db
     .from("withdrawals")
@@ -304,27 +366,32 @@ async function handleWithdraw(payload: Record<string, unknown>): Promise<void> {
   await db.from("wallet_events").upsert(
     {
       user_id: w.user_id,
+      wallet_id: walletRow?.id ?? null,
+      kind: "mainnet",
       type: "withdrawal",
-      mint: USDC_MINT,
+      mint: usdcMintFor("mainnet"),
       amount_raw: `-${w.amount_raw}`,
       signature: sig,
       meta: { destination: w.destination, feeTx },
     },
     { onConflict: "user_id,signature,type,mint" },
   );
-  await refreshBalance(w.user_id);
+  await refreshBalance(w.user_id, "mainnet", walletRow?.id);
 }
 
-/* ───────────────── swap ───────────────── */
+/* ───────────────── swap (hanya mainnet/live — Jupiter tidak mendukung devnet) ───────────────── */
 async function handleSwap(payload: Record<string, unknown>): Promise<void> {
   const db = supabaseAdmin();
   const orderId = String(payload.orderId);
   const { data: order } = await db.from("orders").select("*").eq("id", orderId).single();
   if (!order || order.status === "confirmed") return;
+  if (order.kind === "demo") throw new Error("Swap tidak tersedia untuk wallet demo");
   const cfg = order.config as { inputMint: string; amountRaw: string };
 
-  const owner = await getWalletKeypair(order.user_id);
-  await gasDrop(owner.publicKey.toBase58()); // SOL kecil untuk fee swap
+  // Wallet aktif saat request sudah tercatat di orders.wallet_id — pakai itu
+  // (bukan wallet tertua) agar konsisten dengan cek saldo di route.
+  const owner = await keypairForOrder(order, "mainnet");
+  await gasDrop(owner.publicKey.toBase58(), 2_000_000, "mainnet"); // SOL kecil untuk fee swap
   const res = await executeSwapToUsdc({
     owner,
     inputMint: cfg.inputMint,
@@ -333,6 +400,8 @@ async function handleSwap(payload: Record<string, unknown>): Promise<void> {
   await db.from("wallet_events").upsert(
     {
       user_id: order.user_id,
+      wallet_id: order.wallet_id ?? null,
+      kind: "mainnet",
       type: "swap",
       mint: cfg.inputMint,
       amount_raw: `-${cfg.amountRaw}`,
@@ -347,12 +416,13 @@ async function handleSwap(payload: Record<string, unknown>): Promise<void> {
   if (feeRaw > 0n && res.outAmount) {
     const out = BigInt(res.outAmount);
     if (out > feeRaw) {
-      const treasury = getTreasury();
+      const treasury = getTreasury("mainnet");
       const sig = await sendUsdcTransfer({
         from: owner,
         toOwner: treasury.publicKey,
         amountRaw: feeRaw,
         feePayer: treasury,
+        kind: "mainnet",
       });
       void sig;
     }
@@ -362,7 +432,7 @@ async function handleSwap(payload: Record<string, unknown>): Promise<void> {
     .from("orders")
     .update({ status: "confirmed", tx_signature: res.txSignature })
     .eq("id", orderId);
-  await refreshBalance(order.user_id);
+  await refreshBalance(order.user_id, "mainnet", order.wallet_id ?? undefined);
 }
 
 /* ───────────────── refund ───────────────── */
@@ -383,18 +453,28 @@ async function handleRefund(payload: Record<string, unknown>): Promise<void> {
     await db.from("orders").update({ status: "refunded" }).eq("id", orderId);
     return;
   }
-  const treasury = getTreasury();
-  const { data: wallet } = await db
-    .from("wallets")
-    .select("public_key")
-    .eq("user_id", order.user_id)
-    .single();
+  const kind: WalletKind = order.kind === "demo" ? "demo" : "mainnet";
+  let wallet: { id: string; public_key: string } | null = null;
+  if (order.wallet_id) {
+    wallet = await getWalletById(String(order.wallet_id));
+  } else {
+    const { data: row, error } = await db
+      .from("wallets")
+      .select("id, public_key")
+      .eq("user_id", order.user_id)
+      .eq("kind", kind)
+      .maybeSingle();
+    if (error) throw error;
+    wallet = row;
+  }
   if (!wallet) throw new Error("wallet user tidak ditemukan untuk refund");
+  const treasury = getTreasury(kind);
   const sig = await sendUsdcTransfer({
     from: treasury,
     toOwner: new PublicKey(wallet.public_key),
     amountRaw: amount,
     feePayer: treasury,
+    kind,
   });
   await db
     .from("orders")
@@ -403,8 +483,10 @@ async function handleRefund(payload: Record<string, unknown>): Promise<void> {
   await db.from("wallet_events").upsert(
     {
       user_id: order.user_id,
+      wallet_id: wallet.id ?? null,
+      kind,
       type: "refund",
-      mint: USDC_MINT,
+      mint: usdcMintFor(kind),
       amount_raw: amount.toString(),
       signature: sig,
       meta: { orderId },
@@ -417,16 +499,21 @@ async function handleRefund(payload: Record<string, unknown>): Promise<void> {
 async function handleIndexWallet(payload: Record<string, unknown>): Promise<void> {
   const db = supabaseAdmin();
   const userId = String(payload.userId);
-  const bal = await refreshBalance(userId);
+  const kind: WalletKind = payload.kind === "demo" ? "demo" : "mainnet";
+  await refreshBalance(userId, kind);
   const { data: wallet } = await db
     .from("wallets")
-    .select("public_key")
+    .select("id, public_key")
     .eq("user_id", userId)
-    .single();
+    .eq("kind", kind)
+    .order("created_at", { ascending: true })
+    .limit(1)
+    .maybeSingle(); // user multi-wallet → batasi 1 baris (maybeSingle tanpa limit error)
   if (!wallet) return;
 
-  const ata = usdcAta(new PublicKey(wallet.public_key));
-  const sigs = await rpcRead((c) => c.getSignaturesForAddress(ata, { limit: 25 }));
+  const ata = usdcAta(new PublicKey(wallet.public_key), kind);
+  const usdcMint = usdcMintFor(kind);
+  const sigs = await rpcRead((c) => c.getSignaturesForAddress(ata, { limit: 25 }), kind);
   for (const s of sigs) {
     const { data: existing } = await db
       .from("wallet_events")
@@ -435,27 +522,31 @@ async function handleIndexWallet(payload: Record<string, unknown>): Promise<void
       .eq("signature", s.signature)
       .maybeSingle();
     if (existing) continue;
-    const tx = await rpcRead((c) =>
-      c.getParsedTransaction(s.signature, {
-        maxSupportedTransactionVersion: 0,
-        commitment: "confirmed",
-      }),
+    const tx = await rpcRead(
+      (c) =>
+        c.getParsedTransaction(s.signature, {
+          maxSupportedTransactionVersion: 0,
+          commitment: "confirmed",
+        }),
+      kind,
     );
     if (!tx?.meta?.postTokenBalances) continue;
     const ownerPk = wallet.public_key;
     const post = tx.meta.postTokenBalances.find(
-      (b) => b.owner === ownerPk && b.mint === USDC_MINT,
+      (b) => b.owner === ownerPk && b.mint === usdcMint,
     );
     const pre = (tx.meta.preTokenBalances ?? []).find(
-      (b) => b.owner === ownerPk && b.mint === USDC_MINT,
+      (b) => b.owner === ownerPk && b.mint === usdcMint,
     );
     const delta = BigInt(post?.uiTokenAmount?.amount ?? "0") - BigInt(pre?.uiTokenAmount?.amount ?? "0");
     if (delta > 0n) {
       await db.from("wallet_events").upsert(
         {
           user_id: userId,
+          wallet_id: wallet.id,
+          kind,
           type: "deposit",
-          mint: USDC_MINT,
+          mint: usdcMint,
           amount_raw: delta.toString(),
           signature: s.signature,
           meta: {},
@@ -464,16 +555,16 @@ async function handleIndexWallet(payload: Record<string, unknown>): Promise<void
       );
     }
   }
-  void bal;
 }
 
-/* ───────────────── price_snapshot ───────────────── */
+/* ───────────────── price_snapshot (hanya mainnet — API publik) ───────────────── */
 async function handlePriceSnapshot(): Promise<void> {
   const db = supabaseAdmin();
   const { data: tokens } = await db
     .from("tokens")
     .select("mint")
     .eq("status", "live")
+    .eq("kind", "mainnet")
     .order("created_at", { ascending: false })
     .limit(150);
   for (const t of tokens ?? []) {

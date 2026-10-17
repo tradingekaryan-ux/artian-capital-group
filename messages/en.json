@@ -77,7 +77,31 @@
     "swapAmount": "Amount",
     "swapCta": "Swap",
     "recentEvents": "Recent activity",
-    "noEvents": "No activity yet."
+    "noEvents": "No activity yet.",
+    "switcher": {
+      "title": "Active wallet",
+      "mainnet": "Mainnet",
+      "demo": "Demo (devnet)",
+      "active": "Active",
+      "createWallet": "Create wallet",
+      "createDemo": "Create demo wallet",
+      "createMainnet": "Create mainnet wallet",
+      "labelPlaceholder": "Wallet label (e.g. Ops)",
+      "creating": "Creating…",
+      "onlyOneDemo": "You already have the demo wallet. Switch to it instead.",
+      "demoBadge": "DEMO",
+      "switched": "Wallet switched"
+    },
+    "demo": {
+      "title": "Demo wallet (devnet)",
+      "banner": "This is a DEVNET wallet. Tokens, pools, and balances here are simulated — no real value. Practice creating tokens & pools before going live.",
+      "faucetTitle": "Top up devnet funds",
+      "faucetSol": "Get free SOL (devnet)",
+      "faucetUsdc": "Get free USDC (devnet)",
+      "faucetHint": "Paste the wallet address above into the faucet. SOL pays transaction fees; USDC (devnet) pays service fees.",
+      "noWithdraw": "Withdrawals are disabled on the demo wallet.",
+      "noSwap": "Swaps are disabled on the demo wallet."
+    }
   },
   "create": {
     "title": "Create your token",

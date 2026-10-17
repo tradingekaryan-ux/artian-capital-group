@@ -3,6 +3,8 @@ import { Link } from "@/i18n/navigation";
 import { requireUser, supabaseAdmin } from "@/lib/db/client";
 import { formatNumber, shortAddress } from "@/lib/format";
 import { getPrice } from "@/lib/payment/pricing";
+import { getActiveWallet } from "@/lib/solana/wallet";
+import { explorerClusterParam } from "@/lib/config";
 import { PoolPanel } from "@/components/pools/pool-panel";
 
 interface PoolRow {
@@ -20,6 +22,10 @@ export default async function MyTokensPage({ params }: PageProps<"/[locale]/dash
   const user = await requireUser();
   if (!user) return null;
 
+  const active = await getActiveWallet(user.id).catch(() => null);
+  const kind = active?.kind ?? ("mainnet" as const);
+  const explorerCluster = explorerClusterParam(kind);
+
   const db = supabaseAdmin();
   const [{ data: tokens }, poolPrice, addLiqPrice] = await Promise.all([
     db
@@ -28,6 +34,7 @@ export default async function MyTokensPage({ params }: PageProps<"/[locale]/dash
         "id, mint, name, symbol, supply, decimals, created_at, logo_uri, status, pools(id, pool_id, status, quote_amount, initial_price)",
       )
       .eq("user_id", user.id)
+      .eq("kind", kind)
       .order("created_at", { ascending: false }),
     getPrice("create_pool").catch(() => ({ amount_usdc: 10 })),
     getPrice("add_liquidity").catch(() => ({ amount_usdc: 1 })),
@@ -83,6 +90,11 @@ export default async function MyTokensPage({ params }: PageProps<"/[locale]/dash
                     </Link>
                     <p className="mono text-xs text-muted-ink">{shortAddress(tok.mint, 6)}</p>
                   </div>
+                  {kind === "demo" && (
+                    <span className="rounded-full border-2 border-black bg-[#d8ff3e] px-2 py-0.5 text-[10px] font-bold uppercase">
+                      Demo
+                    </span>
+                  )}
                   <span
                     className={`badge !shadow-none ${
                       hasPool ? "bg-[#dcfce7] text-[#15803d]" : "bg-[#f4f4f5] text-muted-ink"
@@ -104,7 +116,7 @@ export default async function MyTokensPage({ params }: PageProps<"/[locale]/dash
                           Pool: {shortAddress(pool.pool_id, 8)}
                           {" · "}
                           <a
-                            href={`https://explorer.solana.com/address/${pool.pool_id}?cluster=${process.env.NEXT_PUBLIC_SOLANA_CLUSTER ?? "devnet"}`}
+                            href={`https://explorer.solana.com/address/${pool.pool_id}?cluster=${explorerCluster}`}
                             target="_blank"
                             rel="noopener noreferrer"
                             className="font-bold underline decoration-2 underline-offset-2"
@@ -125,6 +137,7 @@ export default async function MyTokensPage({ params }: PageProps<"/[locale]/dash
                         hasPool={!!hasPool}
                         poolFeeUsdc={poolPrice.amount_usdc ?? 10}
                         addLiquidityFeeUsdc={addLiqPrice.amount_usdc ?? 1}
+                        kind={kind}
                       />
                     </div>
                   </details>

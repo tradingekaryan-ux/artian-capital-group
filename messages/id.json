@@ -77,7 +77,31 @@
     "swapAmount": "Jumlah",
     "swapCta": "Tukar",
     "recentEvents": "Aktivitas terakhir",
-    "noEvents": "Belum ada aktivitas."
+    "noEvents": "Belum ada aktivitas.",
+    "switcher": {
+      "title": "Dompet aktif",
+      "mainnet": "Mainnet",
+      "demo": "Demo (devnet)",
+      "active": "Aktif",
+      "createWallet": "Buat dompet",
+      "createDemo": "Buat dompet demo",
+      "createMainnet": "Buat dompet mainnet",
+      "labelPlaceholder": "Label dompet (mis. Operasional)",
+      "creating": "Membuat…",
+      "onlyOneDemo": "Dompet demo sudah dibuat. Gunakan yang sudah ada.",
+      "demoBadge": "DEMO",
+      "switched": "Dompet diganti"
+    },
+    "demo": {
+      "title": "Dompet demo (devnet)",
+      "banner": "Ini dompet DEVNET. Token, pool, dan saldo di sini bersifat simulasi — tanpa nilai nyata. Latihan buat token & pool dulu sebelum mainnet.",
+      "faucetTitle": "Isi dana devnet",
+      "faucetSol": "Dapatkan SOL gratis (devnet)",
+      "faucetUsdc": "Dapatkan USDC gratis (devnet)",
+      "faucetHint": "Salin alamat dompet di atas ke faucet. SOL untuk fee transaksi; USDC (devnet) untuk fee layanan.",
+      "noWithdraw": "Penarikan tidak tersedia di dompet demo.",
+      "noSwap": "Swap tidak tersedia di dompet demo."
+    }
   },
   "create": {
     "title": "Buat token kamu",

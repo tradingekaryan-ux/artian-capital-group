@@ -1,9 +1,15 @@
 import { supabaseAdmin } from "@/lib/db/client";
 import { audit } from "@/lib/security/audit";
-import { readOnChainBalances, getWalletPublicKey } from "@/lib/solana/wallet";
+import {
+  readOnChainBalances,
+  ensureWallet,
+  getActiveWallet,
+  type WalletRow,
+} from "@/lib/solana/wallet";
 import { getTreasury, sendUsdcTransfer } from "@/lib/chain/usdc";
 import { enqueue, type JobType } from "@/lib/jobs/queue";
 import { getPrice, usdcToRaw, type ServiceKey } from "@/lib/payment/pricing";
+import type { WalletKind } from "@/lib/config";
 
 const SERVICE_JOB: Partial<Record<ServiceKey, JobType>> = {
   create_token: "create_token",
@@ -19,15 +25,35 @@ export interface CreateOrderInput {
   config: Record<string, unknown>;
   idempotencyKey?: string;
   ip?: string;
+  /** `mainnet` (default) = cluster utama; `demo` = devnet, bayar USDC devnet. */
+  kind?: WalletKind;
 }
 
 /**
  * Buat order + bayar langsung dari saldo USDC user → treasury (on-chain),
  * lalu antrikan job pekerjaan on-chain.
  * Khusus `swap`: fee diambil dari hasil swap (tidak dibayar di muka).
+ * Untuk `kind: "demo"`: pembayaran & pekerjaan on-chain berjalan di devnet
+ * (USDC devnet dari wallet demo → treasury devnet).
  */
+/**
+ * Wallet sumber dana order: UTAMAKAN wallet aktif (cookie `wid`) bila jenisnya
+ * cocok — multi-wallet user pasti membayar dari dompet yang sedang dipakai.
+ * Fallback: wallet per-kind (auto-create bila belum ada).
+ */
+async function walletForPayment(userId: string, kind: WalletKind): Promise<WalletRow> {
+  try {
+    const active = await getActiveWallet(userId);
+    if (active.kind === kind) return active;
+  } catch {
+    /* cookie/headers tidak tersedia (non-request ctx) → fallback */
+  }
+  return ensureWallet(userId, kind);
+}
+
 export async function createAndPayOrder(input: CreateOrderInput) {
   const db = supabaseAdmin();
+  const kind: WalletKind = input.kind ?? "mainnet";
 
   if (input.idempotencyKey) {
     const { data: existing } = await db
@@ -38,16 +64,23 @@ export async function createAndPayOrder(input: CreateOrderInput) {
     if (existing) return { order: existing, reused: true as const };
   }
 
+  // Wallet sumber dana: dompet aktif bila jenisnya cocok, selain itu wallet per-kind.
+  const wallet = await walletForPayment(input.userId, kind);
+
   const price = await getPrice(input.service);
   const feeRaw = usdcToRaw(price.amount_usdc ?? 0);
   const payUpfront = feeRaw > 0n && input.service !== "swap";
 
   // Cek saldo dulu agar 402 bersih tanpa menyisipkan row order.
   if (payUpfront) {
-    const owner = await getWalletPublicKey(input.userId);
-    const balances = await readOnChainBalances(owner.toBase58());
+    const balances = await readOnChainBalances(wallet.public_key, kind);
     if (balances.usdcRaw < feeRaw) {
-      throw new OrderError("INSUFFICIENT_BALANCE", "Saldo USDC tidak cukup untuk membayar layanan.");
+      throw new OrderError(
+        "INSUFFICIENT_BALANCE",
+        kind === "demo"
+          ? "Saldo USDC devnet tidak cukup. Isi dulu lewat faucet (lihat halaman Wallet demo)."
+          : "Saldo USDC tidak cukup untuk membayar layanan.",
+      );
     }
   }
 
@@ -56,6 +89,8 @@ export async function createAndPayOrder(input: CreateOrderInput) {
     .from("orders")
     .insert({
       user_id: input.userId,
+      wallet_id: wallet.id,
+      kind,
       service: input.service,
       amount_raw: feeRaw.toString(),
       status: "awaiting_payment",
@@ -82,13 +117,15 @@ export async function createAndPayOrder(input: CreateOrderInput) {
   let paymentSignature: string | null = null;
   if (payUpfront) {
     try {
-      const { getWalletKeypair } = await import("@/lib/solana/wallet");
-      const userKp = await getWalletKeypair(input.userId);
+      const { keypairFromEncrypted } = await import("@/lib/solana/keypair");
+      const userKp = keypairFromEncrypted(wallet);
+      const treasury = getTreasury(kind);
       paymentSignature = await sendUsdcTransfer({
         from: userKp,
-        toOwner: getTreasury().publicKey,
+        toOwner: treasury.publicKey,
         amountRaw: feeRaw,
-        feePayer: getTreasury(),
+        feePayer: treasury,
+        kind,
       });
     } catch (e) {
       await db
@@ -112,7 +149,7 @@ export async function createAndPayOrder(input: CreateOrderInput) {
 
   const jobType = SERVICE_JOB[input.service];
   if (jobType) {
-    await enqueue(jobType, { orderId: order.id, userId: input.userId });
+    await enqueue(jobType, { orderId: order.id, userId: input.userId, kind });
     if (payUpfront) {
       await db.from("orders").update({ status: "processing" }).eq("id", order.id);
     }
@@ -122,7 +159,7 @@ export async function createAndPayOrder(input: CreateOrderInput) {
     actor: input.userId,
     action: `order_${input.service}`,
     target: order.id,
-    payload: { feeRaw: feeRaw.toString(), paymentSignature },
+    payload: { feeRaw: feeRaw.toString(), paymentSignature, kind },
     ip: input.ip ?? null,
   });
 

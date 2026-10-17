@@ -5,7 +5,7 @@ import { requireUser, supabaseAdmin } from "@/lib/db/client";
 import { getPrice } from "@/lib/payment/pricing";
 import { formatUsd, formatPercent, formatCompact, formatDate, shortAddress } from "@/lib/format";
 import { CopyButton } from "@/components/copy-button";
-import { SITE } from "@/lib/config";
+import { SITE, explorerClusterParam, type WalletKind } from "@/lib/config";
 import { Sparkline, PriceChart } from "@/components/market/chart";
 import { WatchlistButton } from "@/components/market/watchlist-button";
 import { CommentsSection } from "@/components/community/comments";
@@ -32,6 +32,8 @@ export default async function TokenPage({ params }: PageProps<"/[locale]/token/[
     .eq("mint", mint)
     .maybeSingle();
   if (!token || token.status === "failed") notFound();
+  const tokenKind: WalletKind = token.kind === "demo" ? "demo" : "mainnet";
+  const explorerCluster = explorerClusterParam(tokenKind);
 
   const [snapshots, pool, creator, watching, comments, poolPrice, addLiqPrice] =
     await Promise.all([
@@ -117,6 +119,11 @@ export default async function TokenPage({ params }: PageProps<"/[locale]/token/[
             <span />
           </span>
           <span className="mono text-muted-ink">{shortAddress(token.mint, 6)}</span>
+          {tokenKind === "demo" && (
+            <span className="rounded-full border-2 border-black bg-[#d8ff3e] px-2 py-0.5 text-[10px] font-bold uppercase">
+              Demo · devnet
+            </span>
+          )}
         </div>
         <div className="flex flex-wrap items-center gap-4 p-5">
           {token.logo_uri ? (
@@ -139,7 +146,7 @@ export default async function TokenPage({ params }: PageProps<"/[locale]/token/[
                 by {creator.data?.username ?? "unknown"} · {formatDate(token.created_at)}
               </span>
               <a
-                href={`https://explorer.solana.com/address/${token.mint}?cluster=${process.env.NEXT_PUBLIC_SOLANA_CLUSTER ?? "devnet"}`}
+                href={`https://explorer.solana.com/address/${token.mint}?cluster=${explorerCluster}`}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="font-bold underline decoration-2 underline-offset-2"
@@ -297,6 +304,7 @@ export default async function TokenPage({ params }: PageProps<"/[locale]/token/[
             hasPool={poolRow?.status === "active"}
             poolFeeUsdc={poolPrice.amount_usdc ?? 10}
             addLiquidityFeeUsdc={addLiqPrice.amount_usdc ?? 1}
+            kind={tokenKind}
           />
 
           <Link href="/explore" className="btn btn-secondary w-full">

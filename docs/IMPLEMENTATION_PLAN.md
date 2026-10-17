@@ -67,6 +67,7 @@
 3. **Order create token** → API cek saldo → transfer USDC user→treasury (tx #1, `awaiting_payment→paid`) → job `create_token` → worker: upload metadata → bangun tx (mint+metadata+ATA+supply, payer=treasury) → kirim → `confirmed` → row `tokens` + halaman `/token/{mint}`.
 4. **LP** → order `create_pool` (tx bayar fee) → job → worker Raydium `cpmm.createPool` → LP token ke wallet user → row `pools`.
 5. **Withdrawal** → OTP → job → tx transfer USDC dari wallet user ke tujuan (fee payer treasury) → `confirmed`.
+6. **Mode demo (devnet)** → user buat/aktifkan wallet demo (maks 1) → faucet manual SOL+USDC devnet (user tempel alamatnya di faucet.solana.com / faucet.circle.com) → order `create_token`/`create_pool`/`add_liquidity` dibayar **USDC devnet** dari wallet demo ke treasury devnet → job memakai RPC/program devnet (`networkFor("demo")`) → row `tokens`/`pools` bertanda `kind='demo'` (tersembunyi dari explore). Tanpa withdraw/swap di mode demo.
 
 ### 2.2 Keamanan signing service
 - Master key enkripsi (`WALLET_MASTER_KEY`, 32 byte base64) hanya di secrets runtime.
@@ -127,23 +128,29 @@ artian-capital/
 -- inti akun & wallet (bootstrap via ensureProfile/ensureWallet, tanpa trigger DB)
 profiles(user_id uuid pk→auth.users, username unique, display_name, bio, role text default 'user',
          is_suspended bool default false, created_at)
-wallets(user_id pk→profiles, public_key text unique, enc_secret_key text, iv text, auth_tag text, created_at)
-wallet_events(id bigserial, user_id, type text check in (deposit,payment,withdrawal,swap,refund,lp),
+-- multi-wallet: banyak mainnet per user (label), maks 1 demo per user (partial unique index)
+wallets(id uuid pk, user_id→profiles, kind text check in (mainnet,demo) default 'mainnet',
+        label text, public_key text unique, enc_secret_key text, iv text, auth_tag text, created_at,
+        unique index (user_id) where kind='demo')
+wallet_events(id bigserial, user_id, wallet_id, kind text default 'mainnet',
+              type text check in (deposit,payment,withdrawal,swap,refund,lp),
               mint text, amount_raw numeric, signature text, meta jsonb, confirmed_at timestamptz,
               unique(user_id, signature, type, mint))
-balances_cache(user_id pk, usdc_raw numeric, sol_lamports bigint, refreshed_at)
+balances_cache(wallet_id pk→wallets, user_id, usdc_raw numeric, sol_lamports bigint, refreshed_at)
 
--- order & layanan
-orders(id uuid pk, user_id, service text check in (create_token,create_pool,add_liquidity,
+-- order & layanan (kind: mainnet = cluster utama mengikuti env; demo = selalu devnet)
+orders(id uuid pk, user_id, wallet_id, kind text default 'mainnet' check in (mainnet,demo),
+       service text check in (create_token,create_pool,add_liquidity,
        remove_liquidity,withdraw,swap), amount_raw bigint, status text check in (awaiting_payment,paid,
        processing,confirmed,failed,refunded,cancelled), pricing jsonb, config jsonb,
        payment_signature text unique, idempotency_key text unique, tx_signature text,
        error text, created_at, updated_at)
-tokens(id uuid pk, user_id, mint unique, order_id→orders, name, symbol, decimals int, supply numeric,
-       logo_uri, metadata_uri, description, socials jsonb,
+tokens(id uuid pk, user_id, wallet_id, kind text default 'mainnet', mint unique, order_id→orders,
+       name, symbol, decimals int, supply numeric, logo_uri, metadata_uri, description, socials jsonb,
        revoke_mint bool, revoke_freeze bool, immutable bool,
        status text check in (pending,live,failed), created_tx text, created_at)
-pools(id uuid pk, user_id, token_id→tokens, dex default 'raydium_cpmm', pool_id unique, quote_mint,
+pools(id uuid pk, user_id, wallet_id, kind text default 'mainnet', token_id→tokens,
+      dex default 'raydium_cpmm', pool_id unique, quote_mint,
       fee_tier numeric default 0.25, initial_price numeric, lp_percentage numeric, lp_raw numeric,
       token_amount numeric, quote_amount numeric, status check in (pending,active,failed), created_tx, created_at)
 pool_positions(id, user_id, pool_id, lp_raw, deposited_token, deposited_quote, updated_at,
@@ -168,12 +175,15 @@ jobs(id bigserial, type, payload jsonb, status, attempts int default 0, run_at, 
 
 | Method & path | Fungsi | Auth |
 |---|---|---|
-| `POST /api/orders` | buat order: union zod (`create_token`, `create_pool`, `add_liquidity`, `remove_liquidity`, `withdraw`, `swap`) + idempotency key + authorizeConfig | session |
+| `POST /api/orders` | buat order: union zod (`create_token`, `create_pool`, `add_liquidity`, `remove_liquidity`, `withdraw`, `swap`) + idempotency key + authorizeConfig + `kind` (`mainnet`\|`demo`, default `mainnet`) | session |
 | `GET /api/orders/[id]` | status order (polling UI; embed `mint` token bila sudah ada) | session |
-| `GET /api/wallet/balance` | saldo USDC/SOL on-chain (baca RPC) | session |
-| `POST /api/wallet/withdraw` | ajukan withdrawal + kirim OTP email | session + rate limit |
+| `GET /api/wallet` | daftar wallet user (mainnet multi + demo) + wallet aktif | session |
+| `POST /api/wallet` | buat wallet baru: `{action:"create_mainnet",label?}` atau `{action:"create_demo"}` (maks 1 demo) → set cookie `wid` | session + rate limit |
+| `POST /api/wallet/active` | pindah wallet aktif: `{walletId}` → validasi kepemilikan → set cookie `wid` | session |
+| `GET /api/wallet/balance` | saldo USDC/SOL on-chain wallet **aktif** (baca RPC per kind) | session |
+| `POST /api/wallet/withdraw` | ajukan withdrawal + kirim OTP email (hanya wallet mainnet) | session + rate limit |
 | `POST /api/wallet/withdraw/verify` | verifikasi OTP → eksekusi job withdrawal | session + rate limit |
-| `POST /api/wallet/swap` | quote & execute swap Jupiter → USDC (fee platform dipotong post-swap) | session |
+| `POST /api/wallet/swap` | quote & execute swap Jupiter → USDC (hanya wallet mainnet; ditolak untuk demo) | session |
 | `POST/GET /api/community/comments` · `DELETE` | komentar (buat/publik-baca; hapus milik sendiri) | session / publik |
 | `GET/POST /api/community/watchlist` | toggle watchlist per user | session |
 | `GET /api/admin/overview` | stats orders/jobs/treasury untuk panel admin | role admin |
@@ -245,7 +255,7 @@ jobs(id bigserial, type, payload jsonb, status, attempts int default 0, run_at, 
 ## 7. Strategi Testing
 | Tipe | Alat | Cakupan |
 |---|---|---|
-| Unit ✅ | Vitest | pricing calculator (create_token/pool/add/remove/withdraw + swap fee) & format (raw USDC/angka) — **10 kasus, hijau** |
+| Unit ✅ | Vitest | pricing calculator (create_token/pool/add/remove/withdraw + swap fee), format (raw USDC/angka), & resolusi jaringan per-kind (`network.test.ts`: cluster/USDC-mint/treasury demo) — **hijau** |
 | Unit (tertunda) | Vitest | enkripsi AES-GCM, state machine order, validasi input |
 | Integration (tertunda) | Vitest + mock RPC | token-create tx builder (assert instruksi), withdrawal flow |
 | E2E manual (tertunda) | `scripts/devnet-smoke.ts` | topup→create token→pool→swap→withdraw di devnet |

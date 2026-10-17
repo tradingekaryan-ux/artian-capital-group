@@ -1,6 +1,6 @@
 import { Keypair, VersionedTransaction } from "@solana/web3.js";
 import { getConnection } from "@/lib/solana/connection";
-import { JUPITER } from "@/lib/config";
+import { JUPITER, type WalletKind } from "@/lib/config";
 
 /**
  * Swap in-app via Jupiter Aggregator (REST).
@@ -78,13 +78,17 @@ export async function executeSwapToUsdc(params: {
 }
 
 /** Gas drop: treasury kirim sedikit SOL ke user untuk fee swap. */
-export async function gasDrop(userOwner: string, lamports = 2_000_000): Promise<void> {
+export async function gasDrop(
+  userOwner: string,
+  lamports = 2_000_000,
+  kind: WalletKind = "mainnet",
+): Promise<void> {
   const { SystemProgram, Transaction, sendAndConfirmTransaction } = await import(
     "@solana/web3.js"
   );
   const { PublicKey } = await import("@solana/web3.js");
   const { getTreasury } = await import("@/lib/chain/usdc");
-  const treasury = getTreasury();
+  const treasury = getTreasury(kind);
   const tx = new Transaction().add(
     SystemProgram.transfer({
       fromPubkey: treasury.publicKey,
@@ -92,6 +96,6 @@ export async function gasDrop(userOwner: string, lamports = 2_000_000): Promise<
       lamports,
     }),
   );
-  const conn = getConnection();
+  const conn = getConnection(kind);
   await sendAndConfirmTransaction(conn, tx, [treasury], { commitment: "confirmed" });
 }

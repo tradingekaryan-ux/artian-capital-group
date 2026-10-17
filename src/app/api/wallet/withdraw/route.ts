@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { PublicKey } from "@solana/web3.js";
 import { requireActiveUser, supabaseAdmin } from "@/lib/db/client";
-import { ensureWallet, readOnChainBalances } from "@/lib/solana/wallet";
+import { getActiveWallet, readOnChainBalances } from "@/lib/solana/wallet";
 import { createWithdrawOtp } from "@/lib/security/otp";
 import { rateLimit, clientIp } from "@/lib/security/ratelimit";
 import { audit } from "@/lib/security/audit";
@@ -52,7 +52,13 @@ export async function POST(req: Request) {
   }
 
   try {
-    const wallet = await ensureWallet(user.id);
+    const wallet = await getActiveWallet(user.id);
+    if (wallet.kind === "demo") {
+      return NextResponse.json(
+        { error: "Penarikan tidak tersedia di wallet demo (devnet)." },
+        { status: 403 },
+      );
+    }
     if (destination === wallet.public_key) {
       return NextResponse.json({ error: "Alamat tujuan sama dengan dompetmu" }, { status: 400 });
     }
@@ -62,7 +68,7 @@ export async function POST(req: Request) {
     const amountRaw = usdcToRaw(amount_usdc);
     const totalRaw = amountRaw + feeRaw;
 
-    const balances = await readOnChainBalances(wallet.public_key);
+    const balances = await readOnChainBalances(wallet.public_key, "mainnet");
     if (balances.usdcRaw < totalRaw) {
       return NextResponse.json(
         {
@@ -80,6 +86,7 @@ export async function POST(req: Request) {
       .from("withdrawals")
       .insert({
         user_id: user.id,
+        wallet_id: wallet.id,
         amount_raw: amountRaw.toString(),
         destination,
         status: "pending",

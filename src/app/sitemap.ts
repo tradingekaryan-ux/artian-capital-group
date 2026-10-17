@@ -30,6 +30,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       .from("tokens")
       .select("mint, created_at")
       .eq("status", "live")
+      .eq("kind", "mainnet")
       .order("created_at", { ascending: false })
       .limit(4000);
     if (!error) tokens = data ?? [];

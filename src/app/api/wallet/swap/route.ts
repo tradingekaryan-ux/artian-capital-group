@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { PublicKey } from "@solana/web3.js";
 import { requireActiveUser, supabaseAdmin } from "@/lib/db/client";
-import { ensureWallet, readOnChainBalances, getWalletPublicKey } from "@/lib/solana/wallet";
+import { getActiveWallet, readOnChainBalances } from "@/lib/solana/wallet";
 import { rpcRead } from "@/lib/solana/connection";
 import { rateLimit, clientIp } from "@/lib/security/ratelimit";
 import { audit } from "@/lib/security/audit";
@@ -43,8 +43,16 @@ export async function POST(req: Request) {
   const isSol = asset === "SOL";
 
   try {
-    const wallet = await ensureWallet(user.id);
-    const owner = await getWalletPublicKey(user.id);
+    const wallet = await getActiveWallet(user.id);
+    if (wallet.kind === "demo") {
+      return NextResponse.json(
+        { error: "Swap tidak tersedia di wallet demo (devnet)." },
+        { status: 403 },
+      );
+    }
+    // Selalu pakai wallet AKTIF (sudah pasti mainnet — demo ditolak di atas):
+    // konsisten dengan cek saldo & sumber dana eksekusi job.
+    const owner = new PublicKey(wallet.public_key);
 
     let inputMint = asset;
     let amountRaw: bigint;
@@ -53,7 +61,7 @@ export async function POST(req: Request) {
     if (isSol) {
       inputMint = SOL_MINT;
       amountRaw = BigInt(Math.round(amount * LAMPORTS_PER_SOL));
-      const balances = await readOnChainBalances(wallet.public_key);
+      const balances = await readOnChainBalances(wallet.public_key, "mainnet");
       if (balances.solLamports < amountRaw + BigInt(0.01 * LAMPORTS_PER_SOL)) {
         return NextResponse.json({ error: "Saldo SOL tidak cukup (butuh sedikit SOL untuk fee)." }, { status: 402 });
       }
@@ -65,6 +73,7 @@ export async function POST(req: Request) {
         .select("mint, decimals")
         .eq("mint", asset)
         .eq("user_id", user.id)
+        .eq("kind", "mainnet")
         .maybeSingle();
       if (!token) {
         return NextResponse.json(
@@ -96,6 +105,8 @@ export async function POST(req: Request) {
       .from("orders")
       .insert({
         user_id: user.id,
+        wallet_id: wallet.id,
+        kind: "mainnet",
         service: "swap",
         amount_raw: feeRaw.toString(),
         status: "processing",
@@ -106,7 +117,7 @@ export async function POST(req: Request) {
       .single();
     if (error) throw error;
 
-    await enqueue("swap", { orderId: order.id, userId: user.id });
+    await enqueue("swap", { orderId: order.id, userId: user.id, kind: "mainnet" });
     await audit({
       actor: user.id,
       action: "swap_requested",

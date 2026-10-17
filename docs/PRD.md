@@ -25,7 +25,7 @@ Bagi komunitas financial market yang bukan crypto-native, hambatan di atas membu
 
 ### 1.2 Solusi
 Satu website tempat user:
-- **Membuat akun biasa** (email) — **tanpa membuat/menghubungkan wallet**. Sistem otomatis membuat **1 wallet Solana khusus untuk 1 akun** (kustodial).
+- **Membuat akun biasa** (email) — **tanpa membuat/menghubungkan wallet**. Sistem otomatis membuat **1 wallet Solana khusus untuk 1 akun** (kustodial); user juga bisa membuat **banyak wallet mainnet tambahan** dan **1 wallet demo (devnet)** untuk berlatih (§4 F-J).
 - **Membayar dan dihargai dalam USDC on-chain** (topup dari exchange/wallet eksternal, saldo berakhir di wallet milik user sendiri), lalu menarik kembali (**withdrawal**) dalam USDC kapan saja.
 - **Membuat token Solana** (SPL + metadata) lewat satu form, langsung dibayar dari saldo.
 - **Melihat token buatannya** beserta halaman profil publik otomatis: harga, statistik, chart, likuiditas.
@@ -158,6 +158,16 @@ Total supply token
 - Moderasi komentar & user (suspend).
 - Log audit.
 
+### F-J. Mode Demo (Devnet) & Multi-Wallet
+Tujuan: user bisa **belajar** membuat token & liquidity pool di jaringan uji sebelum memakai dana sungguhan.
+- **Multi-wallet**: setiap user dapat membuat **banyak wallet mainnet** (berlabel) dan **maksimal 1 wallet demo (devnet)**. Wallet aktif dipilih lewat switcher di dashboard (cookie `wid`); saldo, token, dan orders mengikuti wallet aktif.
+- **Wallet demo = sandbox Devnet**:
+  - Deposit **manual**: user menyalin alamat wallet demo lalu meminta (faucet) SOL & USDC devnet dari situs eksternal — `faucet.solana.com` (SOL) dan `faucet.circle.com` (USDC, jaringan Solana Devnet) — dengan menempel alamat wallet sendiri. Tanpa deposit otomatis, tanpa airdrop in-app.
+  - Layanan yang tersedia: **create token → create pool → add/remove liquidity** (harga sama dengan mainnet, dibayar dengan **USDC devnet**).
+  - **Tanpa withdraw & tanpa swap** (Jupiter tidak mendukung devnet; WD/SOL tidak berharga di jaringan uji).
+  - Gas on-chain devnet (rent, Raydium creation fee) tetap ditanggung treasury devnet (butuh airdrop SOL devnet sekali ke kunci treasury).
+- **Penandaan & isolasi data**: setiap row `orders`/`tokens`/`pools`/`wallet_events` membawa `wallet_id` + `kind` (`mainnet`|`demo`). Token/pool demo **disembunyikan** dari explore, sitemap, dan statistik publik — tetap bisa dibuka via link milik pemiliknya (badge DEMO + link explorer `?cluster=devnet`).
+
 ---
 
 ## 5. Alur Transaksi & State Machine
@@ -262,21 +272,24 @@ buffer_gas default 15% (fluktuasi harga SOL & priority fee)
 ```
 profiles            — user_id pk→auth.users, username, display_name, bio,
                       role(user|admin), is_suspended, created_at
-wallets             — user_id pk→profiles, public_key, enc_secret_key, iv, auth_tag
-balances_cache      — user_id pk, usdc_raw, sol_lamports, refreshed_at
-wallet_events       — user_id, type(deposit|payment|withdrawal|swap|refund|lp),
+wallets             — id pk, user_id→profiles, kind(mainnet|demo), label,
+                      public_key unique, enc_secret_key, iv, auth_tag
+                      (banyak wallet mainnet per user; partial unique 1 demo/user)
+balances_cache      — wallet_id pk→wallets, user_id, usdc_raw, sol_lamports, refreshed_at
+wallet_events       — user_id, wallet_id, kind(mainnet|demo),
+                      type(deposit|payment|withdrawal|swap|refund|lp),
                       mint, amount_raw, signature, meta, confirmed_at
-orders              — user_id, service(create_token|create_pool|add_liquidity|
+orders              — user_id, wallet_id, kind(mainnet|demo),
+                      service(create_token|create_pool|add_liquidity|
                       remove_liquidity|withdraw|swap), amount_raw,
                       status(awaiting_payment|paid|processing|confirmed|failed|
                       refunded|cancelled), pricing, config, payment_signature,
                       idempotency_key, tx_signature, error
-tokens              — user_id, mint, order_id, name, symbol, decimals, supply,
-                      logo_uri, metadata_uri, description, socials,
-                      revoke_mint, revoke_freeze, immutable,
-                      status(pending|live|failed), created_tx
-pools               — user_id, token_id, dex(raydium_cpmm), pool_id, quote_mint,
-                      fee_tier, initial_price, lp_percentage, lp_raw,
+tokens              — user_id, wallet_id, kind(mainnet|demo), mint, order_id, name,
+                      symbol, decimals, supply, logo_uri, metadata_uri, description,
+                      socials, revoke_mint, revoke_freeze, immutable, status, created_tx
+pools               — user_id, wallet_id, kind(mainnet|demo), token_id, dex(raydium_cpmm),
+                      pool_id, quote_mint, fee_tier, initial_price, lp_percentage, lp_raw,
                       token_amount, quote_amount, status, created_tx
 pool_positions      — user_id, pool_id, lp_raw, deposited_token, deposited_quote
 price_snapshots     — mint, ts, price_usd, liquidity_usd, volume_24h_usd, fdv_usd
@@ -360,6 +373,7 @@ Kode seluruh fase (F0–F6) telah diimplementasikan; `lint + typecheck + test (1
 | F-G: withdrawal USDC + OTP + audit | ✅ Selesai | Batas harian/whitelist = fase lanjut (sesuai §F-G) |
 | F-H: explore, watchlist, komentar, statistik | ✅ Selesai | **Profil publik user** (per-user halaman) belum ada |
 | F-I: admin panel | ⚠️ Sebagian | Overview, pricing, daftar order, jobs, treasury ✅; **manual retry/refund, moderasi komentar, suspend, viewer audit log belum ada di UI** |
+| F-J: mode demo (devnet) & multi-wallet | ✅ Selesai | Multi-wallet mainnet + maks 1 wallet demo/user; create token & liquidity pool di devnet dibayar USDC devnet; deposit demo manual via faucet eksternal; WD/swap dinonaktifkan di mode demo; token/pool demo difilter dari explore/sitemap |
 | §7.2 ISR | ⚠️ Deviasi | Implementasi memakai SSR dinamis + cache market 15 detik (ISR tidak dipakai) |
 | §5.1 state machine | ⚠️ Deviasi | Tidak ada status `draft`; ada `cancelled`; swap tanpa bayar di muka (lihat §5.1 yang diperbarui) |
 | Exit criteria on-chain (F1/F2/F4/F5) | ⛔ Belum dijalankan | Butuh project Supabase, secret treasury/RPC, dan jaringan devnet |

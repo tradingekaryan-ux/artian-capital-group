@@ -16,6 +16,7 @@ import {
 import { createV1, TokenStandard } from "@metaplex-foundation/mpl-token-metadata";
 import { getConnection } from "@/lib/solana/connection";
 import { getTreasury } from "@/lib/chain/usdc";
+import type { WalletKind } from "@/lib/config";
 
 export interface CreateTokenParams {
   mint: Keypair; // keypair mint baru — secret hanya dipakai saat init & metadata
@@ -44,9 +45,12 @@ export interface CreateTokenResult {
  *
  * User tidak pernah membutuhkan SOL: semua fee & rent dibayar treasury.
  */
-export async function createSplToken(params: CreateTokenParams): Promise<CreateTokenResult> {
-  const connection = getConnection();
-  const treasury = getTreasury();
+export async function createSplToken(
+  params: CreateTokenParams,
+  kind: WalletKind = "mainnet",
+): Promise<CreateTokenResult> {
+  const connection = getConnection(kind);
+  const treasury = getTreasury(kind);
   const signatures: string[] = [];
 
   // 1) Mint account (Token Program)

@@ -125,6 +125,7 @@ async function loadTokens(rawQ: string, sort: "new" | "top"): Promise<TokenItem[
       .from("tokens")
       .select("mint, name, symbol, logo_uri, created_at")
       .eq("status", "live")
+      .eq("kind", "mainnet")
       .order("created_at", { ascending: false })
       .limit(90);
     if (q) {

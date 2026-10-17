@@ -12,7 +12,7 @@ import {
 import bs58 from "bs58";
 import { getConnection, rpcRead } from "@/lib/solana/connection";
 import { recoverExpiredSignature } from "@/lib/chain/confirm";
-import { USDC_MINT, USDC_DECIMALS } from "@/lib/config";
+import { usdcMintFor, USDC_DECIMALS, SECRETS, type WalletKind } from "@/lib/config";
 
 /** Kirim transfer USDC: fee payer = treasury, penandatangan = pemilik dana. */
 export async function sendUsdcTransfer(params: {
@@ -21,15 +21,17 @@ export async function sendUsdcTransfer(params: {
   amountRaw: bigint;
   feePayer: Keypair;
   skipCreateDestAta?: boolean;
+  kind?: WalletKind; // default mainnet/live; demo = USDC devnet
 }): Promise<string> {
-  const conn = getConnection();
-  const mint = new PublicKey(USDC_MINT);
+  const kind = params.kind ?? "mainnet";
+  const conn = getConnection(kind);
+  const mint = new PublicKey(usdcMintFor(kind));
   const destAta = getAssociatedTokenAddressSync(mint, params.toOwner);
   const tx = new Transaction();
 
   if (!params.skipCreateDestAta) {
     // rpcRead: cek ATA tahan-gangguan RPC (failover ke publik cluster)
-    const info = await rpcRead((c) => c.getAccountInfo(destAta));
+    const info = await rpcRead((c) => c.getAccountInfo(destAta), kind);
     if (!info) {
       tx.add(
         createAssociatedTokenAccountInstruction(
@@ -63,12 +65,22 @@ export async function sendUsdcTransfer(params: {
   }
 }
 
-export function getTreasury(): Keypair {
-  const b58secret = process.env.TREASURY_SECRET_KEY;
+/**
+ * Treasury platform. Untuk wallet demo memakai TREASURY_SECRET_KEY_DEMO bila
+ * diset, selain itu fallback ke TREASURY_SECRET_KEY (keypair cluster-agnostic —
+ * hanya perlu di-airdrop SOL devnet sekali).
+ */
+export function getTreasury(kind: WalletKind = "mainnet"): Keypair {
+  if (kind === "demo") {
+    const b58 = SECRETS.treasuryKeyDemo || SECRETS.treasuryKey;
+    if (!b58) throw new Error("TREASURY_SECRET_KEY(_DEMO) belum dikonfigurasi");
+    return Keypair.fromSecretKey(bs58.decode(b58));
+  }
+  const b58secret = SECRETS.treasuryKey;
   if (!b58secret) throw new Error("TREASURY_SECRET_KEY belum dikonfigurasi");
   return Keypair.fromSecretKey(bs58.decode(b58secret));
 }
 
-export function usdcAtaOf(owner: PublicKey): PublicKey {
-  return getAssociatedTokenAddressSync(new PublicKey(USDC_MINT), owner);
+export function usdcAtaOf(owner: PublicKey, kind: WalletKind = "mainnet"): PublicKey {
+  return getAssociatedTokenAddressSync(new PublicKey(usdcMintFor(kind)), owner);
 }

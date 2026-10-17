@@ -17,6 +17,8 @@ interface Props {
   hasPool: boolean;
   poolFeeUsdc: number;
   addLiquidityFeeUsdc: number;
+  /** Jenis wallet pemilik: `demo` (devnet) = order tanpa nilai nyata. */
+  kind?: "mainnet" | "demo";
 }
 
 /** Idempotency-key acak (per form) — cegah order ganda akibat klik/ retry. */
@@ -31,6 +33,15 @@ export function PoolPanel(props: Props) {
   return props.hasPool ? <LiquidityForms {...props} /> : <CreatePoolForm {...props} />;
 }
 
+function DemoBadge({ kind }: { kind?: "mainnet" | "demo" }) {
+  if (kind !== "demo") return null;
+  return (
+    <span className="rounded-full border-2 border-black bg-[#d8ff3e] px-2 py-0.5 text-[10px] font-bold uppercase">
+      Demo · devnet
+    </span>
+  );
+}
+
 /* ─────────────── buat pool ─────────────── */
 function CreatePoolForm({
   tokenId,
@@ -38,6 +49,7 @@ function CreatePoolForm({
   supply,
   symbol,
   poolFeeUsdc,
+  kind = "mainnet",
 }: Props) {
   const t = useTranslations("token");
   const router = useRouter();
@@ -66,6 +78,7 @@ function CreatePoolForm({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           service: "create_pool",
+          kind,
           idempotencyKey: idemRef.current,
           config: {
             tokenId,
@@ -116,6 +129,7 @@ function CreatePoolForm({
       <div className="chrome">
         <span className="chrome-dots"><span /><span /><span /></span>
         <span className="text-muted-ink">{t("createPool")}</span>
+        <DemoBadge kind={kind} />
       </div>
       <div className="p-5">
       <div className="flex flex-col gap-4 text-sm">
@@ -175,7 +189,7 @@ function CreatePoolForm({
 }
 
 /* ─────────────── add / remove liquidity ─────────────── */
-function LiquidityForms({ poolId, symbol, decimals, addLiquidityFeeUsdc, poolAddress }: Props) {
+function LiquidityForms({ poolId, symbol, decimals, addLiquidityFeeUsdc, poolAddress, kind = "mainnet" }: Props) {
   const t = useTranslations("token");
   const router = useRouter();
   const [mode, setMode] = useState<"add" | "remove">("add");
@@ -208,7 +222,7 @@ function LiquidityForms({ poolId, symbol, decimals, addLiquidityFeeUsdc, poolAdd
       const res = await fetch("/api/orders", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ service, config, idempotencyKey: idemRef.current }),
+        body: JSON.stringify({ service, kind, config, idempotencyKey: idemRef.current }),
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error ?? "Error");
@@ -228,6 +242,7 @@ function LiquidityForms({ poolId, symbol, decimals, addLiquidityFeeUsdc, poolAdd
       <div className="chrome">
         <span className="chrome-dots"><span /><span /></span>
         <span className="text-muted-ink">{symbol}</span>
+        <DemoBadge kind={kind} />
       </div>
       <div className="p-5">
       <div className="mb-3 flex gap-2">

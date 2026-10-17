@@ -119,12 +119,17 @@ async function fetchStats() {
   try {
     const supabase = await supabaseServer();
     const [tokens, users] = await Promise.all([
-      supabase.from("tokens").select("mint", { count: "exact", head: true }),
-      supabase.from("wallets").select("user_id", { count: "exact", head: true }),
+      supabase
+        .from("tokens")
+        .select("mint", { count: "exact", head: true })
+        .eq("kind", "mainnet"),
+      // Hitung pengguna unik via profiles (wallet kini bisa >1 per user).
+      supabase.from("profiles").select("user_id", { count: "exact", head: true }),
     ]);
     const { data: pools } = await supabase
       .from("pools")
       .select("liquidity_usd")
+      .eq("kind", "mainnet")
       .limit(500);
     const tvlUsd = (pools ?? []).reduce(
       (sum, p) => sum + (Number(p.liquidity_usd) || 0),
