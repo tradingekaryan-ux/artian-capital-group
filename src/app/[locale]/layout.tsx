@@ -45,12 +45,12 @@ export default async function LocaleLayout({
     "@type": "WebSite",
     name: SITE.name,
     url: SITE.url,
-    inLanguage: locale,
+    inLanguage: "en",
     potentialAction: {
       "@type": "SearchAction",
       target: {
         "@type": "EntryPoint",
-        urlTemplate: `${SITE.url}/${locale}/explore?q={search_term_string}`,
+        urlTemplate: `${SITE.url}/explore?q={search_term_string}`,
       },
       "query-input": "required name=search_term_string",
     },
@@ -68,7 +68,7 @@ export default async function LocaleLayout({
         />
         <NextIntlClientProvider messages={messages}>
           <Nav />
-          <Ticker locale={locale} />
+          <Ticker />
           <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-10 sm:px-6">
             {children}
           </main>

@@ -42,7 +42,7 @@ export function AdminPanel() {
           if (!cancelled && j) setData(j);
         })
         .catch(() => {
-          if (!cancelled) setError("Gagal memuat (cek login admin & env).");
+          if (!cancelled) setError("Failed to load (check admin login & env).");
         });
     };
     tick();

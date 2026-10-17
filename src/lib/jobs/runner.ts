@@ -209,7 +209,7 @@ async function handleCreatePool(payload: Record<string, unknown>): Promise<void>
     feeBps?: number;
   };
   const { data: token } = await db.from("tokens").select("*").eq("id", cfg.tokenId).single();
-  if (!token) throw new Error("token tidak ditemukan");
+  if (!token) throw new Error("token not found");
 
   const kind = orderKind(order, payload);
   const owner = await keypairForOrder(order, kind);
@@ -264,7 +264,7 @@ async function handleAddLiquidity(payload: Record<string, unknown>): Promise<voi
   if (!order || order.status === "confirmed") return;
   const cfg = order.config as { poolId: string; inputAmountRaw: string; baseIn: boolean };
   const { data: pool } = await db.from("pools").select("*").eq("id", cfg.poolId).single();
-  if (!pool?.pool_id) throw new Error("pool tidak valid");
+  if (!pool?.pool_id) throw new Error("invalid pool");
 
   const kind = orderKind(order, payload);
   const owner = await keypairForOrder(order, kind);
@@ -298,7 +298,7 @@ async function handleRemoveLiquidity(payload: Record<string, unknown>): Promise<
   if (!order || order.status === "confirmed") return;
   const cfg = order.config as { poolId: string; lpAmountRaw: string };
   const { data: pool } = await db.from("pools").select("*").eq("id", cfg.poolId).single();
-  if (!pool?.pool_id) throw new Error("pool tidak valid");
+  if (!pool?.pool_id) throw new Error("invalid pool");
 
   const kind = orderKind(order, payload);
   const owner = await keypairForOrder(order, kind);
@@ -357,12 +357,12 @@ async function handleBurn(payload: Record<string, unknown>): Promise<void> {
       ata = getAssociatedTokenAddressSync(mint, owner.publicKey, false, undefined, TOKEN_2022_PROGRAM_ID);
       acct = await conn.getAccountInfo(ata);
     }
-    if (!acct) throw new Error("wallet tidak memegang token ini");
+    if (!acct) throw new Error("wallet does not hold this token");
 
     const amountRaw = BigInt(cfg.amountRaw);
     const bal = BigInt((await conn.getTokenAccountBalance(ata)).value.amount);
     if (bal < amountRaw) {
-      throw new Error("saldo token berkurang — jumlah melebihi saldo saat ini (gagal, coba lagi)");
+      throw new Error("token balance changed — amount exceeds current balance (failed, try again)");
     }
 
     const tx = new Transaction().add(
@@ -486,7 +486,7 @@ async function handleSwap(payload: Record<string, unknown>): Promise<void> {
   const orderId = String(payload.orderId);
   const { data: order } = await db.from("orders").select("*").eq("id", orderId).single();
   if (!order || order.status === "confirmed") return;
-  if (order.kind === "demo") throw new Error("Swap tidak tersedia untuk wallet demo");
+  if (order.kind === "demo") throw new Error("Swaps are not available on the demo wallet");
   const cfg = order.config as { inputMint: string; amountRaw: string };
 
   // Wallet aktif saat request sudah tercatat di orders.wallet_id — pakai itu
@@ -546,7 +546,7 @@ async function handleRefund(payload: Record<string, unknown>): Promise<void> {
   if (!order || order.status === "confirmed" || order.status === "refunded") return;
   if (!order.payment_signature) {
     // Tidak ada pembayaran → tidak ada yang perlu direfund.
-    await db.from("orders").update({ status: "failed", error: order.error ?? "job gagal" }).eq("id", orderId);
+    await db.from("orders").update({ status: "failed", error: order.error ?? "job failed" }).eq("id", orderId);
     return;
   }
   const amount = BigInt(order.amount_raw as string);
@@ -568,7 +568,7 @@ async function handleRefund(payload: Record<string, unknown>): Promise<void> {
     if (error) throw error;
     wallet = data as WalletRow | null;
   }
-  if (!wallet) throw new Error("wallet user tidak ditemukan untuk refund");
+  if (!wallet) throw new Error("user wallet not found for refund");
   const treasury = getTreasury(kind);
   // Gas refund dari saldo SOL user (fee-payer = user) — job refund punya
   // retry panjang (lihat queue.failJob) agar user sempat mengisi SOL bila habis.
@@ -676,7 +676,7 @@ async function handlePriceSnapshot(): Promise<void> {
       const summary = await fetchMarketSummary(t.mint);
       await saveSnapshot(t.mint, summary);
     } catch (e) {
-      console.error(`[price_snapshot] ${t.mint} gagal:`, e);
+      console.error(`[price_snapshot] ${t.mint} failed:`, e);
       /* satu token gagal tidak menghentikan batch */
     }
   }
@@ -714,7 +714,7 @@ export async function runPendingJobs(limit = 5): Promise<{ done: number; failed:
       done += 1;
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
-      console.error(`[job ${job.id} ${job.type}] gagal:`, msg);
+      console.error(`[job ${job.id} ${job.type}] failed:`, msg);
       const permanent = await failJob(job, msg);
       failed += 1;
       if (permanent) await onPermanentFailure(job, msg);
@@ -756,6 +756,6 @@ async function onPermanentFailure(job: JobRow, msg: string): Promise<void> {
         .neq("status", "confirmed");
     }
   } catch (e) {
-    console.error("[runner] onPermanentFailure gagal:", e);
+    console.error("[runner] onPermanentFailure failed:", e);
   }
 }

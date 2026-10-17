@@ -105,7 +105,7 @@ function CreatePoolForm({
         }
         if (j.order.status === "failed" || j.order.status === "refunded") {
           clearInterval(pollRef.current!);
-          setError("Pembuatan pool gagal — dana direfund.");
+          setError("Pool creation failed — funds were refunded.");
         }
       }, 3000);
     } catch (err) {
@@ -119,7 +119,7 @@ function CreatePoolForm({
     const done = status === "confirmed";
     return (
       <div className="text-sm text-muted-ink">
-        {done ? "Pool aktif! Memuat ulang…" : `Memproses pembuatan pool… (${status})`}
+        {done ? "Pool active! Reloading…" : `Processing pool creation… (${status})`}
       </div>
     );
   }
@@ -174,7 +174,7 @@ function CreatePoolForm({
 
         <div className="rounded-xl border-2 border-black bg-[#ede9fe] p-3 text-xs font-medium text-muted-ink">
           {t("poolFee")}: <strong className="text-ink">{poolFeeUsdc} USDC</strong> ·{" "}
-          Biaya jaringan ditanggung platform
+          Network gas paid from your SOL balance
         </div>
 
         {error && <p className="text-sm font-bold text-[#b91c1c]">{error}</p>}
@@ -227,7 +227,7 @@ function LiquidityForms({ poolId, symbol, decimals, addLiquidityFeeUsdc, poolAdd
       const json = await res.json();
       if (!res.ok) throw new Error(json.error ?? "Error");
       track(service, { poolId });
-      setMessage("Sedang diproses — cek halaman Orders untuk status.");
+      setMessage("Processing — check the Orders page for status.");
       setAmount("");
       router.refresh();
     } catch (err) {
@@ -278,7 +278,7 @@ function LiquidityForms({ poolId, symbol, decimals, addLiquidityFeeUsdc, poolAdd
         {mode === "add" && (
           <p className="text-xs text-muted-ink">
             {t("poolFee")}: <strong>{addLiquidityFeeUsdc} USDC</strong> ·{" "}
-            Biaya jaringan ditanggung platform
+            Network gas paid from your SOL balance
           </p>
         )}
 

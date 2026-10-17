@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useTranslations, useLocale } from "next-intl";
+import { useTranslations } from "next-intl";
 import { useRouter } from "@/i18n/navigation";
 import { track } from "@/lib/analytics";
 
@@ -23,7 +23,6 @@ export function CommentsSection({
   currentUserId: string | null;
 }) {
   const t = useTranslations("token");
-  const locale = useLocale();
   const router = useRouter();
   const [comments, setComments] = useState(initial);
   const [body, setBody] = useState("");
@@ -33,7 +32,7 @@ export function CommentsSection({
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     if (!currentUserId) {
-      router.push(`/${locale}/login`);
+      router.push("/login");
       return;
     }
     setBusy(true);
@@ -116,7 +115,7 @@ export function CommentsSection({
           </li>
         ))}
         {comments.length === 0 && (
-          <li className="py-3 text-sm text-muted-ink">Belum ada komentar — jadi yang pertama.</li>
+          <li className="py-3 text-sm text-muted-ink">No comments yet — be the first.</li>
         )}
       </ul>
       </div>

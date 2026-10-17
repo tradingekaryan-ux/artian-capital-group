@@ -54,7 +54,7 @@ export function VerifyForm() {
         <div className="p-6 sm:p-8">
           <h1 className="text-3xl">{t("verifyTitle")}</h1>
           <p className="mt-2 text-sm font-medium text-muted-ink">
-            Cek kotak masuk email — kode 6 digit sudah dikirim.
+            Check your inbox — a 6-digit code has been sent.
           </p>
           <form onSubmit={submit} className="mt-6 flex flex-col gap-4">
             <div>

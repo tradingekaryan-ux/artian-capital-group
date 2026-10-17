@@ -19,6 +19,6 @@ export async function audit(entry: AuditEntry): Promise<void> {
       ip: entry.ip ?? null,
     });
   } catch (e) {
-    console.error("[audit] gagal menulis log", e);
+    console.error("[audit] failed to write log", e);
   }
 }

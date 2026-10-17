@@ -42,7 +42,7 @@ export async function supabaseServer(): Promise<SupabaseClient> {
 export function supabaseAdmin(): SupabaseClient {
   if (!_server) {
     if (!SUPABASE.url || !SECRETS.serviceRoleKey) {
-      throw new Error("SUPABASE_URL / SERVICE_ROLE_KEY belum dikonfigurasi");
+      throw new Error("SUPABASE_URL / SERVICE_ROLE_KEY is not configured");
     }
     _server = createClient(SUPABASE.url, SECRETS.serviceRoleKey, {
       auth: { persistSession: false, autoRefreshToken: false },

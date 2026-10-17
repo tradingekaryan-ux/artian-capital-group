@@ -35,7 +35,7 @@ export async function getQuote(params: {
   url.searchParams.set("slippageBps", String(params.slippageBps ?? 50));
   url.searchParams.set("swapMode", "ExactIn");
   const res = await fetch(url, { headers: headers() });
-  if (!res.ok) throw new Error(`Jupiter quote gagal: ${res.status} ${await res.text()}`);
+  if (!res.ok) throw new Error(`Jupiter quote failed: ${res.status} ${await res.text()}`);
   return (await res.json()) as QuoteResponse;
 }
 
@@ -63,7 +63,7 @@ export async function executeSwapToUsdc(params: {
       prioritizationFeeLamports: "auto",
     }),
   });
-  if (!res.ok) throw new Error(`Jupiter swap gagal: ${res.status} ${await res.text()}`);
+  if (!res.ok) throw new Error(`Jupiter swap failed: ${res.status} ${await res.text()}`);
   const data = (await res.json()) as { swapTransaction: string };
 
   const tx = VersionedTransaction.deserialize(Buffer.from(data.swapTransaction, "base64"));

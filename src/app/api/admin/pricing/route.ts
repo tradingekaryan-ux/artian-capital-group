@@ -25,11 +25,11 @@ export async function PATCH(req: Request) {
   try {
     json = await req.json();
   } catch {
-    return NextResponse.json({ error: "Body tidak valid" }, { status: 400 });
+    return NextResponse.json({ error: "Invalid request body" }, { status: 400 });
   }
   const parsed = bodySchema.safeParse(json);
   if (!parsed.success) {
-    const msg = parsed.error.issues[0]?.message ?? "Validasi gagal";
+    const msg = parsed.error.issues[0]?.message ?? "Validation failed";
     return NextResponse.json({ error: msg }, { status: 400 });
   }
 
@@ -39,7 +39,7 @@ export async function PATCH(req: Request) {
       { key: parsed.data.key, value: parsed.data.value, updated_by: admin.id, updated_at: new Date().toISOString() },
       { onConflict: "key" },
     );
-  if (error) return NextResponse.json({ error: "Gagal menyimpan" }, { status: 500 });
+  if (error) return NextResponse.json({ error: "Failed to save" }, { status: 500 });
 
   await audit({
     actor: admin.id,

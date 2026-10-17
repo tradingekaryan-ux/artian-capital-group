@@ -5,10 +5,10 @@ import { supabaseAdmin } from "@/lib/db/client";
 const USDC_DECIMALS = 1_000_000n;
 
 /**
- * Pendapatan admin:
+ * Pendapatan admin (HANYA mainnet — data devnet/demo dikecualikan):
  * - Fee layanan (create_token/create_pool/add_liquidity/…) — dari orders yang SUDAH DIBAYAR.
  * - Fee withdraw — dari withdrawals.fee_raw (dikumpulkan on-chain ke treasury).
- * - Total USDC milik user yang tersimpan (kustodial) — sum balances_cache.
+ * - Total USDC milik user yang tersimpan (kustodial) — sum balances_cache dompet mainnet.
  */
 export async function GET() {
   const admin = await requireAdmin();
@@ -16,18 +16,24 @@ export async function GET() {
 
   try {
     const db = supabaseAdmin();
-    const [paidOrders, withdrawals, balances] = await Promise.all([
+    const [paidOrders, withdrawals, balances, mainnetWallets] = await Promise.all([
       db
         .from("orders")
         .select("id, user_id, service, amount_raw, created_at")
         .not("payment_signature", "is", null)
+        .eq("kind", "mainnet")
         .limit(20_000),
       db
         .from("withdrawals")
         .select("id, user_id, fee_raw, amount_raw, status, created_at")
         .limit(20_000),
-      db.from("balances_cache").select("user_id, usdc_raw").limit(20_000),
+      db.from("balances_cache").select("user_id, wallet_id, usdc_raw").limit(20_000),
+      db.from("wallets").select("id").eq("kind", "mainnet").limit(50_000),
     ]);
+
+    // Saldo kustodial hanya dari dompet mainnet (devnet dikecualikan).
+    const mainnetWalletIds = new Set((mainnetWallets.data ?? []).map((w) => w.id));
+    const realBalances = (balances.data ?? []).filter((b) => mainnetWalletIds.has(b.wallet_id));
 
     // ── agregat fee per layanan ──
     const byService = new Map<string, { count: number; feeRaw: bigint }>();
@@ -63,9 +69,9 @@ export async function GET() {
       }
     }
 
-    // ── total USDC milik user (kustodial) ──
+    // ── total USDC milik user (kustodial, dompet mainnet saja) ──
     let userUsdcRaw = 0n;
-    for (const b of balances.data ?? []) {
+    for (const b of realBalances) {
       userUsdcRaw += BigInt(b.usdc_raw ?? "0");
       userIds.add(b.user_id);
     }
@@ -83,9 +89,7 @@ export async function GET() {
       withdrawsWithFee,
       totalRevenueUsdc: Number(totalFeeRaw + withdrawFeeRaw) / Number(USDC_DECIMALS),
       userUsdcHeldUsdc: Number(userUsdcRaw) / Number(USDC_DECIMALS),
-      userCount: new Set(
-        [...(balances.data ?? []).map((b) => b.user_id), ...(paidOrders.data ?? []).map((o) => o.user_id)],
-      ).size,
+      userCount: new Set([...realBalances.map((b) => b.user_id), ...(paidOrders.data ?? []).map((o) => o.user_id)]).size,
       byService: [...byService.entries()]
         .map(([service, v]) => ({
           service,
@@ -104,7 +108,7 @@ export async function GET() {
         .slice(0, 100),
     });
   } catch (e) {
-    console.error("[admin] revenue gagal:", e);
-    return NextResponse.json({ error: "Gagal memuat pendapatan" }, { status: 500 });
+    console.error("[admin] revenue failed:", e);
+    return NextResponse.json({ error: "Failed to load revenue" }, { status: 500 });
   }
 }

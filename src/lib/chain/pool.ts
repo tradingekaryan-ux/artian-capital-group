@@ -93,7 +93,7 @@ export async function createCpmmPool(
   const userSol = await rpcRead((c) => c.getBalance(p.owner.publicKey), kind);
   if (userSol < 260_000_000) {
     throw new Error(
-      "Saldo SOL tidak cukup untuk biaya pembuatan pool (butuh ±0,26 SOL). Isi SOL dulu, lalu coba lagi.",
+      "Insufficient SOL for pool creation fees (need ±0.26 SOL). Add SOL first, then try again.",
     );
   }
 
@@ -124,7 +124,7 @@ export async function createCpmmPool(
         : (e !== null && typeof e === "object"
             ? JSON.stringify(e, Object.getOwnPropertyNames(e))
             : String(e)) || String(e);
-    throw new Error(`Raydium createPool gagal: ${detail}`);
+    throw new Error(`Raydium createPool failed: ${detail}`);
   }
   const { extInfo } = built;
   return {

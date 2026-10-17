@@ -25,7 +25,7 @@ export default async function ExplorePage({
         </Link>
       </div>
 
-      <form className="flex flex-wrap gap-3" action={`/${locale}/explore`} method="get">
+      <form className="flex flex-wrap gap-3" action="/explore" method="get">
         <input
           name="q"
           defaultValue={q}
@@ -43,7 +43,7 @@ export default async function ExplorePage({
         <div className="card p-12 text-center">
           <p className="text-sm font-semibold text-muted-ink">{t("empty")}</p>
           <Link href="/create" className="btn btn-primary mt-4 inline-flex">
-            {t("sortNew") === "Terbaru" ? "Buat token" : "Create one"}
+            {t("emptyAction")}
           </Link>
         </div>
       ) : (

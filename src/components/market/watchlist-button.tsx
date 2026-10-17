@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useTranslations, useLocale } from "next-intl";
+import { useTranslations } from "next-intl";
 import { useRouter } from "@/i18n/navigation";
 import { track } from "@/lib/analytics";
 
@@ -13,7 +13,6 @@ export function WatchlistButton({
   initial: boolean;
 }) {
   const t = useTranslations("token");
-  const locale = useLocale();
   const router = useRouter();
   const [watching, setWatching] = useState(initial);
   const [busy, setBusy] = useState(false);
@@ -27,7 +26,7 @@ export function WatchlistButton({
         body: JSON.stringify({ mint }),
       });
       if (res.status === 401) {
-        router.push(`/${locale}/login`);
+        router.push("/login");
         return;
       }
       const json = await res.json();

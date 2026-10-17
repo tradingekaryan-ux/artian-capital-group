@@ -33,7 +33,7 @@ export async function GET() {
       throw rpcError;
     }
   } catch (e) {
-    console.error("[balance] gagal:", e);
-    return NextResponse.json({ error: "Gagal membaca saldo" }, { status: 500 });
+    console.error("[balance] failed:", e);
+    return NextResponse.json({ error: "Failed to read balance" }, { status: 500 });
   }
 }

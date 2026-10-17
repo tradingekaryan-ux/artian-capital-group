@@ -44,12 +44,43 @@ const nextConfig: NextConfig = {
     rules: {
       "*.css": {
         loaders: ["@tailwindcss/turbopack"],
-        as: "*.css",
       },
     },
   },
   async headers() {
     return [{ source: "/:path*", headers: securityHeaders }];
+  },
+  // URL bersih tanpa prefix locale (satu bahasa: English).
+  // Redirect legacy /en/* & /id/* → versi tanpa prefix; rewrite halaman app
+  // → segmen [locale] internal. Urutan Next: redirects dulu, lalu rewrites.
+  async redirects() {
+    return [
+      { source: "/en", destination: "/", permanent: true },
+      { source: "/en/:path*", destination: "/:path*", permanent: true },
+      { source: "/id", destination: "/", permanent: true },
+      { source: "/id/:path*", destination: "/:path*", permanent: true },
+    ];
+  },
+  async rewrites() {
+    return {
+      beforeFiles: [{ source: "/", destination: "/en" }],
+      afterFiles: [
+        { source: "/login", destination: "/en/login" },
+        { source: "/register", destination: "/en/register" },
+        { source: "/create", destination: "/en/create" },
+        { source: "/create/:path*", destination: "/en/create/:path*" },
+        { source: "/explore", destination: "/en/explore" },
+        { source: "/explore/:path*", destination: "/en/explore/:path*" },
+        { source: "/dashboard", destination: "/en/dashboard" },
+        { source: "/dashboard/:path*", destination: "/en/dashboard/:path*" },
+        { source: "/token/:path*", destination: "/en/token/:path*" },
+        { source: "/admin", destination: "/en/admin" },
+        { source: "/admin/:path*", destination: "/en/admin/:path*" },
+        { source: "/verify", destination: "/en/verify" },
+        { source: "/verify/:path*", destination: "/en/verify/:path*" },
+      ],
+      fallback: [],
+    };
   },
 };
 

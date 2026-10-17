@@ -14,7 +14,7 @@ export default async function AdminUsersPage({
   const q = typeof sp?.q === "string" ? sp.q : "";
   const t = await getTranslations("admin");
   const admin = await requireAdmin();
-  if (!admin) redirect(`/${locale}/dashboard`);
+  if (!admin) redirect("/dashboard");
 
   return (
     <div className="flex flex-col gap-6">
@@ -24,6 +24,7 @@ export default async function AdminUsersPage({
           ← {t("back")}
         </Link>
       </div>
+      <p className="text-sm font-medium text-muted-ink">{t("mainnetOnlyNote")}</p>
       <AdminUsersPanel initialQ={q} />
     </div>
   );

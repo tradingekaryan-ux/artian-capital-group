@@ -19,24 +19,24 @@ export async function POST(req: Request) {
   const auth = await requireActiveUser();
   if (!auth) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   if (auth.suspended) {
-    return NextResponse.json({ error: "Akun ditangguhkan. Hubungi admin." }, { status: 403 });
+    return NextResponse.json({ error: "Your account is suspended. Contact admin." }, { status: 403 });
   }
   const user = auth.user;
 
   const ip = clientIp(req);
   if (!(await rateLimit(`swap:${user.id}`, LIMITS.orderPerHour, 3_600_000))) {
-    return NextResponse.json({ error: "Terlalu banyak permintaan." }, { status: 429 });
+    return NextResponse.json({ error: "Too many requests." }, { status: 429 });
   }
 
   let json: unknown;
   try {
     json = await req.json();
   } catch {
-    return NextResponse.json({ error: "Body tidak valid" }, { status: 400 });
+    return NextResponse.json({ error: "Invalid request body" }, { status: 400 });
   }
   const parsed = bodySchema.safeParse(json);
   if (!parsed.success) {
-    return NextResponse.json({ error: "Validasi gagal" }, { status: 400 });
+    return NextResponse.json({ error: "Validation failed" }, { status: 400 });
   }
 
   const { asset, amount } = parsed.data;
@@ -46,7 +46,7 @@ export async function POST(req: Request) {
     const wallet = await getActiveWallet(user.id);
     if (wallet.kind === "demo") {
       return NextResponse.json(
-        { error: "Swap tidak tersedia di wallet demo (devnet)." },
+        { error: "Swaps are not available on the demo wallet (devnet)." },
         { status: 403 },
       );
     }
@@ -60,7 +60,7 @@ export async function POST(req: Request) {
     if (balances.solLamports < requiredSol) {
       return NextResponse.json(
         {
-          error: `Saldo SOL tidak cukup untuk gas swap (butuh ±${requiredSolFor("swap")} SOL). Deposit SOL dulu, lalu coba lagi.`,
+          error: `Insufficient SOL for swap gas (need ±${requiredSolFor("swap")} SOL). Deposit SOL first, then try again.`,
           code: "INSUFFICIENT_SOL",
         },
         { status: 402 },
@@ -76,7 +76,7 @@ export async function POST(req: Request) {
       amountRaw = BigInt(Math.round(amount * LAMPORTS_PER_SOL));
       if (balances.solLamports < amountRaw + requiredSol) {
         return NextResponse.json(
-          { error: "Saldo SOL tidak cukup (butuh sedikit SOL untuk fee).", code: "INSUFFICIENT_SOL" },
+          { error: "Insufficient SOL (a little SOL is needed for network fees).", code: "INSUFFICIENT_SOL" },
           { status: 402 },
         );
       }
@@ -92,7 +92,7 @@ export async function POST(req: Request) {
         .maybeSingle();
       if (!token) {
         return NextResponse.json(
-          { error: "Aset tidak didukung. Untuk MVP, swap dari SOL atau token buatanmu sendiri." },
+          { error: "Asset not supported. For now, you can swap from SOL or your own tokens." },
           { status: 400 },
         );
       }
@@ -108,7 +108,7 @@ export async function POST(req: Request) {
         ? BigInt((await rpcRead((c) => c.getTokenAccountBalance(ata))).value.amount)
         : 0n;
       if (held < amountRaw) {
-        return NextResponse.json({ error: "Saldo token tidak cukup." }, { status: 402 });
+        return NextResponse.json({ error: "Insufficient token balance." }, { status: 402 });
       }
     }
 
@@ -143,7 +143,7 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ order, feeRaw: feeRaw.toString() });
   } catch (e) {
-    console.error("[swap] gagal:", e);
-    return NextResponse.json({ error: "Gagal memproses swap" }, { status: 500 });
+    console.error("[swap] failed:", e);
+    return NextResponse.json({ error: "Failed to process swap" }, { status: 500 });
   }
 }

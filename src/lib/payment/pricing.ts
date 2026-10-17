@@ -17,7 +17,7 @@ export const pricingValueSchema = z
   })
   .refine(
     (v) => v.amount_usdc !== undefined || v.flat_usdc !== undefined || v.percent !== undefined,
-    { message: "value harus memuat minimal amount_usdc, flat_usdc, atau percent" },
+    { message: "value must include at least amount_usdc, flat_usdc, or percent" },
   );
 
 export type ServiceKey =
@@ -67,14 +67,14 @@ export const U64_MAX = 2n ** 64n - 1n;
  */
 export function uiToRaw(amount: string | number, decimals: number): bigint {
   const s = String(amount).trim();
-  if (!/^\d+(\.\d+)?$/.test(s)) throw new Error(`amount tidak valid: ${s}`);
+  if (!/^\d+(\.\d+)?$/.test(s)) throw new Error(`invalid amount: ${s}`);
   const [intPart, fracPart = ""] = s.split(".");
   if (fracPart.length > decimals) {
-    throw new Error(`amount melebihi ${decimals} desimal`);
+    throw new Error(`amount exceeds ${decimals} decimals`);
   }
   const frac = fracPart.padEnd(decimals, "0");
   const raw = BigInt(intPart + frac);
-  if (raw > U64_MAX) throw new Error("amount melebihi batas u64");
+  if (raw > U64_MAX) throw new Error("amount exceeds u64 limit");
   return raw;
 }
 

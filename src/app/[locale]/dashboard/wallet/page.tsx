@@ -2,7 +2,7 @@ import { getTranslations, setRequestLocale } from "next-intl/server";
 import { requireUser, supabaseAdmin } from "@/lib/db/client";
 import { usdcMintFor, explorerClusterParam, type WalletKind } from "@/lib/config";
 import { getActiveWallet, readOnChainBalances } from "@/lib/solana/wallet";
-import { getPrice } from "@/lib/payment/pricing";
+import { getPrice, getPricing, requiredSolFor, type PriceRow, type ServiceKey } from "@/lib/payment/pricing";
 import { CopyButton } from "@/components/copy-button";
 import { WithdrawCard } from "@/components/wallet/withdraw-card";
 import { SwapCard } from "@/components/wallet/swap-card";
@@ -12,6 +12,7 @@ export default async function WalletPage({ params }: PageProps<"/[locale]/dashbo
   const { locale } = await params;
   setRequestLocale(locale);
   const t = await getTranslations("wallet");
+  const tf = await getTranslations("fees");
   const user = await requireUser();
   if (!user) return null;
 
@@ -24,9 +25,40 @@ export default async function WalletPage({ params }: PageProps<"/[locale]/dashbo
   }));
   const withdrawFee = await getPrice("withdraw");
   const swapFee = await getPrice("swap");
+  const pricing = await getPricing();
   const events = await loadEvents(user.id, wallet.id);
   const usdcMint = usdcMintFor(kind);
   const explorerCluster = explorerClusterParam(kind);
+
+  const feeText = (row?: PriceRow) => {
+    if (!row) return tf("free");
+    if (row.percent !== undefined) {
+      const min = row.min_usdc ? ` (min ${row.min_usdc} USDC)` : "";
+      return `${row.percent}%${min}`;
+    }
+    const usdc = row.flat_usdc ?? row.amount_usdc ?? 0;
+    return usdc > 0 ? `${usdc} USDC` : tf("free");
+  };
+  const svcOrder: ServiceKey[] = [
+    "create_token",
+    "create_pool",
+    "add_liquidity",
+    "remove_liquidity",
+    "swap",
+    "withdraw",
+    "burn",
+    "burn_earn",
+  ];
+  const svcLabel: Record<ServiceKey, string> = {
+    create_token: tf("svcCreateToken"),
+    create_pool: tf("svcCreatePool"),
+    add_liquidity: tf("svcAddLiquidity"),
+    remove_liquidity: tf("svcRemoveLiquidity"),
+    swap: tf("svcSwap"),
+    withdraw: tf("svcWithdraw"),
+    burn: tf("svcBurn"),
+    burn_earn: tf("svcBurnEarn"),
+  };
 
   return (
     <div className="grid gap-6 lg:grid-cols-2">
@@ -149,6 +181,50 @@ export default async function WalletPage({ params }: PageProps<"/[locale]/dashbo
             </section>
           </>
         )}
+
+        <section className="card overflow-hidden">
+          <div className="chrome">
+            <span className="chrome-dots"><span /><span /><span /></span>
+            <span className="text-muted-ink">{tf("title")}</span>
+          </div>
+          <div className="flex flex-col gap-4 p-5 text-sm">
+            <p className="text-xs font-medium text-muted-ink">{tf("intro")}</p>
+
+            <div className="rounded-xl border-2 border-black bg-[#f5f3ff] p-3">
+              <p className="text-xs font-bold uppercase tracking-wide">{tf("usdcTitle")}</p>
+              <p className="mt-1 text-xs text-muted-ink">{tf("usdcBody")}</p>
+            </div>
+
+            <div className="rounded-xl border-2 border-black bg-[#ede9fe] p-3">
+              <p className="text-xs font-bold uppercase tracking-wide">{tf("solTitle")}</p>
+              <p className="mt-1 text-xs text-muted-ink">{tf("solBody")}</p>
+              <p className="mt-1 text-xs text-muted-ink">{tf("rentNote")}</p>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="border-b-2 border-black text-left uppercase tracking-wide text-muted-ink">
+                    <th className="py-2 pr-2 font-bold">{tf("colAction")}</th>
+                    <th className="py-2 px-2 font-bold">{tf("colFee")}</th>
+                    <th className="py-2 pl-2 text-right font-bold">{tf("colGas")}</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-black/10">
+                  {svcOrder.map((k) => (
+                    <tr key={k}>
+                      <td className="py-2 pr-2 font-semibold">{svcLabel[k]}</td>
+                      <td className="py-2 px-2">{feeText(pricing[k])}</td>
+                      <td className="py-2 pl-2 text-right font-bold">
+                        ±{requiredSolFor(k).toFixed(2)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
       </div>
 
       <section className="card h-fit overflow-hidden">

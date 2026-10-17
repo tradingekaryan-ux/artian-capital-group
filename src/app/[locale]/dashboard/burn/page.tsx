@@ -52,7 +52,7 @@ export default async function BurnPage({ params, searchParams }: PageProps<"/[lo
         meta[row.mint] = { name: row.name, symbol: row.symbol };
       }
     } catch (e) {
-      console.error("[burn] muat holdings gagal:", e);
+      console.error("[burn] load holdings failed:", e);
     }
     try {
       const db = supabaseAdmin();
@@ -67,7 +67,7 @@ export default async function BurnPage({ params, searchParams }: PageProps<"/[lo
         totalPoints += Number(r.points ?? 0);
       }
     } catch (e) {
-      console.error("[burn] muat reward gagal:", e);
+      console.error("[burn] load rewards failed:", e);
     }
   }
 

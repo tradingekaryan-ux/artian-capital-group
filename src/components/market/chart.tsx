@@ -35,7 +35,7 @@ export function PriceChart({ points }: { points: SnapshotPoint[] }) {
   if (clean.length < 2) {
     return (
       <div className="flex h-56 items-center justify-center rounded-xl border-2 border-black bg-[#f5f3ff] text-sm font-semibold text-muted-ink">
-        Belum cukup data chart — data mulai terkumpul setelah pool aktif.
+        Not enough chart data yet — data starts accumulating after the pool is active.
       </div>
     );
   }

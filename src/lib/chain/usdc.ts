@@ -81,11 +81,11 @@ export async function sendUsdcTransfer(params: {
 export function getTreasury(kind: WalletKind = "mainnet"): Keypair {
   if (kind === "demo") {
     const b58 = SECRETS.treasuryKeyDemo || SECRETS.treasuryKey;
-    if (!b58) throw new Error("TREASURY_SECRET_KEY(_DEMO) belum dikonfigurasi");
+    if (!b58) throw new Error("TREASURY_SECRET_KEY(_DEMO) is not configured");
     return Keypair.fromSecretKey(bs58.decode(b58));
   }
   const b58secret = SECRETS.treasuryKey;
-  if (!b58secret) throw new Error("TREASURY_SECRET_KEY belum dikonfigurasi");
+  if (!b58secret) throw new Error("TREASURY_SECRET_KEY is not configured");
   return Keypair.fromSecretKey(bs58.decode(b58secret));
 }
 

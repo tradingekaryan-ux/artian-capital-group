@@ -14,14 +14,14 @@ export async function POST(req: Request) {
   try {
     json = await req.json();
   } catch {
-    return NextResponse.json({ error: "Body tidak valid" }, { status: 400 });
+    return NextResponse.json({ error: "Invalid request body" }, { status: 400 });
   }
   const parsed = bodySchema.safeParse(json);
-  if (!parsed.success) return NextResponse.json({ error: "Validasi gagal" }, { status: 400 });
+  if (!parsed.success) return NextResponse.json({ error: "Validation failed" }, { status: 400 });
 
   const wallet = await getWalletById(parsed.data.walletId);
   if (!wallet || wallet.user_id !== auth.user.id) {
-    return NextResponse.json({ error: "Wallet tidak ditemukan" }, { status: 404 });
+    return NextResponse.json({ error: "Wallet not found" }, { status: 404 });
   }
 
   const res = NextResponse.json({ activeId: wallet.id, kind: wallet.kind });

@@ -30,8 +30,8 @@ export async function GET() {
       activeId: active.id,
     });
   } catch (e) {
-    console.error("[wallet list] gagal:", e);
-    return NextResponse.json({ error: "Gagal memuat wallet" }, { status: 500 });
+    console.error("[wallet list] failed:", e);
+    return NextResponse.json({ error: "Failed to load wallets" }, { status: 500 });
   }
 }
 
@@ -40,22 +40,22 @@ export async function POST(req: Request) {
   const auth = await requireActiveUser();
   if (!auth) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   if (auth.suspended) {
-    return NextResponse.json({ error: "Akun ditangguhkan. Hubungi admin." }, { status: 403 });
+    return NextResponse.json({ error: "Your account is suspended. Contact admin." }, { status: 403 });
   }
   const ip = clientIp(req);
   if (!(await rateLimit(`wallet-create:${auth.user.id}`, 10, 3_600_000))) {
-    return NextResponse.json({ error: "Terlalu banyak permintaan." }, { status: 429 });
+    return NextResponse.json({ error: "Too many requests." }, { status: 429 });
   }
 
   let json: unknown;
   try {
     json = await req.json();
   } catch {
-    return NextResponse.json({ error: "Body tidak valid" }, { status: 400 });
+    return NextResponse.json({ error: "Invalid request body" }, { status: 400 });
   }
   const parsed = bodySchema.safeParse(json);
   if (!parsed.success) {
-    return NextResponse.json({ error: "Validasi gagal" }, { status: 400 });
+    return NextResponse.json({ error: "Validation failed" }, { status: 400 });
   }
 
   try {
@@ -88,7 +88,7 @@ export async function POST(req: Request) {
     });
     return res;
   } catch (e) {
-    console.error("[wallet create] gagal:", e);
-    return NextResponse.json({ error: "Gagal membuat wallet" }, { status: 500 });
+    console.error("[wallet create] failed:", e);
+    return NextResponse.json({ error: "Failed to create wallet" }, { status: 500 });
   }
 }

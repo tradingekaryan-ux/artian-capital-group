@@ -18,7 +18,7 @@ export async function rateLimit(
     if (error) throw error;
     return (data as number) <= limit;
   } catch (e) {
-    console.error("[rateLimit] gagal (fail-open):", e);
+    console.error("[rateLimit] failed (fail-open):", e);
     return true;
   }
 }

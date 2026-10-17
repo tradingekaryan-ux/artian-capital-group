@@ -18,28 +18,28 @@ export async function POST(req: Request) {
   const auth = await requireActiveUser();
   if (!auth) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   if (auth.suspended) {
-    return NextResponse.json({ error: "Akun ditangguhkan. Hubungi admin." }, { status: 403 });
+    return NextResponse.json({ error: "Your account is suspended. Contact admin." }, { status: 403 });
   }
   const user = auth.user;
 
   const ip = clientIp(req);
   if (!(await rateLimit(`withdraw:${user.id}`, LIMITS.withdrawPerHour, 3_600_000))) {
-    return NextResponse.json({ error: "Batas penarikan terlampaui, coba besok." }, { status: 429 });
+    return NextResponse.json({ error: "Daily withdrawal limit reached, try again tomorrow." }, { status: 429 });
   }
   if (!(await rateLimit(`withdraw-ip:${ip}`, LIMITS.withdrawPerHour * 3, 3_600_000))) {
-    return NextResponse.json({ error: "Terlalu banyak permintaan." }, { status: 429 });
+    return NextResponse.json({ error: "Too many requests." }, { status: 429 });
   }
 
   let json: unknown;
   try {
     json = await req.json();
   } catch {
-    return NextResponse.json({ error: "Body tidak valid" }, { status: 400 });
+    return NextResponse.json({ error: "Invalid request body" }, { status: 400 });
   }
   const parsed = bodySchema.safeParse(json);
   if (!parsed.success) {
     return NextResponse.json(
-      { error: parsed.error.issues[0]?.message ?? "Validasi gagal" },
+      { error: parsed.error.issues[0]?.message ?? "Validation failed" },
       { status: 400 },
     );
   }
@@ -48,19 +48,19 @@ export async function POST(req: Request) {
   try {
     new PublicKey(destination);
   } catch {
-    return NextResponse.json({ error: "Alamat tujuan bukan Solana address yang valid" }, { status: 400 });
+    return NextResponse.json({ error: "Destination address is not a valid Solana address" }, { status: 400 });
   }
 
   try {
     const wallet = await getActiveWallet(user.id);
     if (wallet.kind === "demo") {
       return NextResponse.json(
-        { error: "Penarikan tidak tersedia di wallet demo (devnet)." },
+        { error: "Withdrawals are not available on the demo wallet (devnet)." },
         { status: 403 },
       );
     }
     if (destination === wallet.public_key) {
-      return NextResponse.json({ error: "Alamat tujuan sama dengan dompetmu" }, { status: 400 });
+      return NextResponse.json({ error: "Destination address is the same as your wallet" }, { status: 400 });
     }
 
     const fee = await getPrice("withdraw");
@@ -72,7 +72,7 @@ export async function POST(req: Request) {
     if (balances.usdcRaw < totalRaw) {
       return NextResponse.json(
         {
-          error: "Saldo USDC tidak cukup (jumlah + fee penarikan).",
+          error: "Insufficient USDC (amount + withdrawal fee).",
           code: "INSUFFICIENT_BALANCE",
           balanceUsdc: Number(balances.usdcRaw) / 1e6,
           requiredUsdc: Number(totalRaw) / 1e6,
@@ -85,7 +85,7 @@ export async function POST(req: Request) {
     if (balances.solLamports < BigInt(Math.ceil(requiredSol * LAMPORTS_PER_SOL))) {
       return NextResponse.json(
         {
-          error: `Saldo SOL tidak cukup untuk gas penarikan (butuh ±${requiredSol} SOL). Deposit SOL dulu, lalu coba lagi.`,
+          error: `Insufficient SOL for withdrawal gas (need ±${requiredSol} SOL). Deposit SOL first, then try again.`,
           code: "INSUFFICIENT_SOL",
         },
         { status: 402 },
@@ -118,7 +118,7 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ id: w.id, otpSent: true, devCode: otp.devCode });
   } catch (e) {
-    console.error("[withdraw] gagal:", e);
-    return NextResponse.json({ error: "Gagal memproses penarikan" }, { status: 500 });
+    console.error("[withdraw] failed:", e);
+    return NextResponse.json({ error: "Failed to process withdrawal" }, { status: 500 });
   }
 }

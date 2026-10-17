@@ -44,7 +44,7 @@ export async function uploadTokenAssets(
   const { error: upErr } = await db.storage
     .from(BUCKET)
     .upload(logoPath, logoBuf, { contentType: `image/${ext}`, upsert: false });
-  if (upErr) throw new Error(`Upload logo gagal: ${upErr.message}`);
+  if (upErr) throw new Error(`Logo upload failed: ${upErr.message}`);
 
   const offchain = {
     name: meta.name,
@@ -69,7 +69,7 @@ export async function uploadTokenAssets(
       contentType: "application/json",
       upsert: false,
     });
-  if (metaErr) throw new Error(`Upload metadata gagal: ${metaErr.message}`);
+  if (metaErr) throw new Error(`Metadata upload failed: ${metaErr.message}`);
 
   const { data: metaUrl } = db.storage.from(BUCKET).getPublicUrl(metaPath);
   return { logoUri: logoUrl.publicUrl, metadataUri: metaUrl.publicUrl };

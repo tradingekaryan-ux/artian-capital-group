@@ -10,7 +10,7 @@ export default async function CreatePage({ params }: PageProps<"/[locale]/create
   setRequestLocale(locale);
   const t = await getTranslations("create");
   const user = await requireUser();
-  if (!user) redirect(`/${locale}/login`);
+  if (!user) redirect("/login");
 
   const [price, wallet] = await Promise.all([
     getPrice("create_token"),

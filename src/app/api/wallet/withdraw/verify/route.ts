@@ -15,30 +15,30 @@ export async function POST(req: Request) {
   const auth = await requireActiveUser();
   if (!auth) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   if (auth.suspended) {
-    return NextResponse.json({ error: "Akun ditangguhkan. Hubungi admin." }, { status: 403 });
+    return NextResponse.json({ error: "Your account is suspended. Contact admin." }, { status: 403 });
   }
   const user = auth.user;
 
   const ip = clientIp(req);
   if (!(await rateLimit(`withdraw-verify:${user.id}`, 10, 3_600_000))) {
-    return NextResponse.json({ error: "Terlalu banyak percobaan." }, { status: 429 });
+    return NextResponse.json({ error: "Too many attempts." }, { status: 429 });
   }
 
   let json: unknown;
   try {
     json = await req.json();
   } catch {
-    return NextResponse.json({ error: "Body tidak valid" }, { status: 400 });
+    return NextResponse.json({ error: "Invalid request body" }, { status: 400 });
   }
   const parsed = bodySchema.safeParse(json);
   if (!parsed.success) {
-    return NextResponse.json({ error: "OTP tidak valid" }, { status: 400 });
+    return NextResponse.json({ error: "Invalid OTP" }, { status: 400 });
   }
 
   const id = String(parsed.data.id);
   const ok = await verifyWithdrawOtp(id, user.id, parsed.data.otp);
   if (!ok) {
-    return NextResponse.json({ error: "Kode salah atau kedaluwarsa" }, { status: 400 });
+    return NextResponse.json({ error: "Wrong or expired code" }, { status: 400 });
   }
 
   const db = supabaseAdmin();
@@ -51,7 +51,7 @@ export async function POST(req: Request) {
     .select("id, wallet_id")
     .maybeSingle();
   if (!updated) {
-    return NextResponse.json({ error: "Penarikan tidak dalam status pending" }, { status: 409 });
+    return NextResponse.json({ error: "Withdrawal is not in pending status" }, { status: 409 });
   }
 
   await enqueue("withdraw", {

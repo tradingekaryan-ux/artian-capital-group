@@ -1,13 +1,12 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useTranslations, useLocale } from "next-intl";
+import { useTranslations } from "next-intl";
 import { Link, usePathname, useRouter } from "@/i18n/navigation";
 import { supabaseBrowser } from "@/lib/db/client";
 
 export function Nav() {
   const t = useTranslations("nav");
-  const locale = useLocale();
   const pathname = usePathname();
   const router = useRouter();
   const [email, setEmail] = useState<string | null>(null);
@@ -20,8 +19,6 @@ export function Nav() {
     });
     return () => sub.subscription.unsubscribe();
   }, [pathname]);
-
-  const otherLocale = locale === "en" ? "id" : "en";
 
   async function logout() {
     await supabaseBrowser().auth.signOut();
@@ -55,12 +52,6 @@ export function Nav() {
           </nav>
         </div>
         <div className="flex items-center gap-2 text-sm">
-          <Link
-            href={pathname === "/" ? `/${otherLocale}` : `/${otherLocale}${pathname}`}
-            className="rounded-full border-2 border-white/40 px-2.5 py-1 text-xs font-bold uppercase text-white hover:border-[#d8ff3e] hover:text-[#d8ff3e]"
-          >
-            {otherLocale.toUpperCase()}
-          </Link>
           {email ? (
             <>
               <Link href="/dashboard" className="btn btn-secondary !py-1.5 !text-[11px]">

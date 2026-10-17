@@ -9,7 +9,7 @@ import { audit } from "@/lib/security/audit";
 import { LIMITS, type WalletKind } from "@/lib/config";
 
 /** Amount desimal-positif (string) — divalidasi presisi + batas u64 oleh uiToRaw. */
-const amountString = z.string().regex(/^\d+(\.\d+)?$/, "jumlah tidak valid");
+const amountString = z.string().regex(/^\d+(\.\d+)?$/, "invalid amount");
 
 /** Wallet aktif order: mainnet (default) atau demo (devnet, USDC devnet). */
 const kindField = z.enum(["mainnet", "demo"]).default("mainnet");
@@ -28,8 +28,8 @@ const createTokenSchema = z
       supply: amountString,
       logoBase64: z
         .string()
-        .refine((v) => v.startsWith("data:image/"), "logo harus berupa data URL gambar")
-        .refine((v) => v.length <= 700_000, "logo terlalu besar (maks ~500KB)"),
+        .refine((v) => v.startsWith("data:image/"), "logo must be an image data URL")
+        .refine((v) => v.length <= 700_000, "logo too large (max ~500KB)"),
       description: z.string().max(500).optional(),
       website: z.string().url().max(200).optional().or(z.literal("")),
       twitter: z.string().max(200).optional().or(z.literal("")),
@@ -45,11 +45,11 @@ const createTokenSchema = z
   .superRefine((data, ctx) => {
     try {
       const raw = uiToRaw(data.config.supply, data.config.decimals);
-      if (raw <= 0n) throw new Error("supply harus > 0");
+      if (raw <= 0n) throw new Error("supply must be > 0");
     } catch (e) {
       ctx.addIssue({
         code: "custom",
-        message: e instanceof Error ? e.message : "supply tidak valid",
+        message: e instanceof Error ? e.message : "invalid supply",
         path: ["config", "supply"],
       });
     }
@@ -71,12 +71,12 @@ const createPoolSchema = z
   })
   .superRefine((data, ctx) => {
     try {
-      if (uiToRaw(data.config.tokenAmount, 9) <= 0n) throw new Error("tokenAmount harus > 0");
-      if (uiToRaw(data.config.quoteAmount, 9) <= 0n) throw new Error("quoteAmount harus > 0");
+      if (uiToRaw(data.config.tokenAmount, 9) <= 0n) throw new Error("tokenAmount must be > 0");
+      if (uiToRaw(data.config.quoteAmount, 9) <= 0n) throw new Error("quoteAmount must be > 0");
     } catch (e) {
       ctx.addIssue({
         code: "custom",
-        message: e instanceof Error ? e.message : "jumlah tidak valid",
+        message: e instanceof Error ? e.message : "invalid amount",
         path: ["config", "tokenAmount"],
       });
     }
@@ -86,7 +86,7 @@ const addLiquiditySchema = z.object({
   service: z.literal("add_liquidity"),
   config: z.object({
     poolId: z.string().uuid(),
-    inputAmountRaw: z.string().refine((v) => /^\d+$/.test(v) && BigInt(v) > 0n, "jumlah tidak valid"),
+    inputAmountRaw: z.string().refine((v) => /^\d+$/.test(v) && BigInt(v) > 0n, "invalid amount"),
     baseIn: z.boolean(),
   }),
   kind: kindField,
@@ -97,7 +97,7 @@ const removeLiquiditySchema = z.object({
   service: z.literal("remove_liquidity"),
   config: z.object({
     poolId: z.string().uuid(),
-    lpAmountRaw: z.string().refine((v) => /^\d+$/.test(v) && BigInt(v) > 0n, "jumlah tidak valid"),
+    lpAmountRaw: z.string().refine((v) => /^\d+$/.test(v) && BigInt(v) > 0n, "invalid amount"),
   }),
   kind: kindField,
   idempotencyKey: z.string().max(100).optional(),
@@ -127,26 +127,26 @@ export async function POST(req: Request) {
   const auth = await requireActiveUser();
   if (!auth) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   if (auth.suspended) {
-    return NextResponse.json({ error: "Akun ditangguhkan. Hubungi admin." }, { status: 403 });
+    return NextResponse.json({ error: "Account suspended. Contact admin." }, { status: 403 });
   }
   const user = auth.user;
 
   const ip = clientIp(req);
   if (!(await rateLimit(`order:${user.id}`, LIMITS.orderPerHour, 3_600_000))) {
-    return NextResponse.json({ error: "Terlalu banyak permintaan, coba nanti." }, { status: 429 });
+    return NextResponse.json({ error: "Too many requests, try again later." }, { status: 429 });
   }
 
   let json: unknown;
   try {
     json = await req.json();
   } catch {
-    return NextResponse.json({ error: "Body tidak valid" }, { status: 400 });
+    return NextResponse.json({ error: "Invalid request body" }, { status: 400 });
   }
 
   const parsed = bodySchema.safeParse(json);
   if (!parsed.success) {
     return NextResponse.json(
-      { error: parsed.error.issues[0]?.message ?? "Validasi gagal" },
+      { error: parsed.error.issues[0]?.message ?? "Validation failed" },
       { status: 400 },
     );
   }
@@ -185,14 +185,14 @@ export async function POST(req: Request) {
     if (e instanceof z.ZodError) {
       return NextResponse.json({ error: e.issues[0]?.message }, { status: 400 });
     }
-    console.error("[orders] gagal:", e);
+    console.error("[orders] failed:", e);
     await audit({
       actor: user.id,
       action: "order_error",
       payload: { service: parsed.data.service, message: String(e) },
       ip,
     });
-    return NextResponse.json({ error: "Gagal membuat pesanan" }, { status: 500 });
+    return NextResponse.json({ error: "Failed to create order" }, { status: 500 });
   }
 }
 
@@ -209,12 +209,12 @@ async function authorizeConfig(
       .select("id, user_id, kind")
       .eq("id", data.config.tokenId)
       .maybeSingle();
-    if (!token) return "Token tidak ditemukan";
-    if (token.user_id !== userId) return "Bukan token milikmu";
+    if (!token) return "Token not found";
+    if (token.user_id !== userId) return "Not your token";
     if (token.kind !== kind) {
       return kind === "demo"
-        ? "Token ini bukan token demo — buat token baru lewat wallet demo."
-        : "Token ini token demo — pindah ke wallet demo untuk mengelolanya.";
+        ? "This is not a demo token — create a new token from the demo wallet."
+        : "This is a demo token — switch to the demo wallet to manage it.";
     }
   }
   if (data.service === "add_liquidity" || data.service === "remove_liquidity") {
@@ -223,12 +223,12 @@ async function authorizeConfig(
       .select("id, user_id, pool_id, kind")
       .eq("id", data.config.poolId)
       .maybeSingle();
-    if (!pool?.pool_id) return "Pool tidak ditemukan";
-    if (pool.user_id !== userId) return "Bukan pool milikmu";
+    if (!pool?.pool_id) return "Pool not found";
+    if (pool.user_id !== userId) return "Not your pool";
     if (pool.kind !== kind) {
       return kind === "demo"
-        ? "Pool ini bukan pool demo."
-        : "Pool ini pool demo — kelola lewat wallet demo.";
+        ? "This is not a demo pool."
+        : "This is a demo pool — manage it from the demo wallet.";
     }
   }
   return null;
@@ -251,7 +251,7 @@ async function preflightBurn(
     const wallet = await getActiveWallet(userId);
     if (wallet.kind !== "mainnet") {
       return {
-        error: "Burn hanya tersedia di wallet mainnet — pindah ke wallet live dulu.",
+        error: "Burn is only available on the mainnet wallet — switch to a live wallet first.",
         status: 403,
       };
     }
@@ -260,7 +260,7 @@ async function preflightBurn(
     try {
       mintPk = new PublicKey(data.config.mint);
     } catch {
-      return { error: "Alamat mint tidak valid", status: 400 };
+      return { error: "Invalid mint address", status: 400 };
     }
 
     const { getAssociatedTokenAddressSync, TOKEN_2022_PROGRAM_ID } = await import("@solana/spl-token");
@@ -288,23 +288,23 @@ async function preflightBurn(
     let required: bigint;
     try {
       required = uiToRaw(data.config.amount, decimals);
-      if (required <= 0n) throw new Error("jumlah harus > 0");
+      if (required <= 0n) throw new Error("amount must be > 0");
     } catch (e) {
-      return { error: e instanceof Error ? e.message : "jumlah tidak valid", status: 400 };
+      return { error: e instanceof Error ? e.message : "invalid amount", status: 400 };
     }
     if (amountRaw < required) {
       return {
         error:
           amountRaw === 0n
-            ? "Kamu tidak memegang token ini di wallet aktif."
-            : "Saldo token tidak cukup untuk jumlah yang akan dibakar.",
+            ? "You don't hold this token in your active wallet."
+            : "Insufficient token balance for the amount to burn.",
         code: "INSUFFICIENT_BALANCE",
         status: 402,
       };
     }
     return { amountRaw: required.toString(), decimals };
   } catch (e) {
-    console.error("[orders] preflight burn gagal:", e);
-    return { error: "Gagal memeriksa saldo token", status: 500 };
+    console.error("[orders] burn preflight failed:", e);
+    return { error: "Failed to check token balance", status: 500 };
   }
 }

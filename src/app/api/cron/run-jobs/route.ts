@@ -18,7 +18,7 @@ export async function POST(req: Request) {
     const result = await runPendingJobs(Math.min(Math.max(limit, 1), 25));
     return NextResponse.json({ ok: true, ...result });
   } catch (e) {
-    console.error("[cron] run-jobs gagal:", e);
+    console.error("[cron] run-jobs failed:", e);
     return NextResponse.json({ ok: false, error: String(e) }, { status: 500 });
   }
 }

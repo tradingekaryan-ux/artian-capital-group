@@ -83,8 +83,8 @@ export async function createAndPayOrder(input: CreateOrderInput) {
     throw new OrderError(
       "INSUFFICIENT_BALANCE",
       kind === "demo"
-        ? "Saldo USDC devnet tidak cukup. Isi dulu lewat faucet (lihat halaman Wallet demo)."
-        : "Saldo USDC tidak cukup untuk membayar layanan.",
+        ? "Insufficient devnet USDC. Fund it via a faucet first (see the demo Wallet page)."
+        : "Insufficient USDC to pay for this service.",
     );
   }
   const requiredSol = requiredSolFor(input.service);
@@ -92,8 +92,8 @@ export async function createAndPayOrder(input: CreateOrderInput) {
     throw new OrderError(
       "INSUFFICIENT_SOL",
       kind === "demo"
-        ? `Saldo SOL devnet tidak cukup untuk gas transaksi (butuh ±${requiredSol} SOL). Isi lewat faucet SOL, lalu coba lagi.`
-        : `Saldo SOL tidak cukup untuk gas on-chain (butuh ±${requiredSol} SOL). Deposit SOL ke alamat dompetmu dulu, lalu coba lagi.`,
+        ? `Insufficient devnet SOL for transaction gas (need ±${requiredSol} SOL). Get SOL from a faucet, then try again.`
+        : `Insufficient SOL for on-chain gas (need ±${requiredSol} SOL). Deposit SOL to your wallet address first, then try again.`,
     );
   }
 
@@ -145,7 +145,7 @@ export async function createAndPayOrder(input: CreateOrderInput) {
         .from("orders")
         .update({
           status: "failed",
-          error: `Pembayaran gagal: ${e instanceof Error ? e.message : String(e)}`,
+          error: `Payment failed: ${e instanceof Error ? e.message : String(e)}`,
         })
         .eq("id", order.id);
       throw e;

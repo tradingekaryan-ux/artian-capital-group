@@ -82,7 +82,7 @@ export default async function TokenPage({ params }: PageProps<"/[locale]/token/[
     "@type": "WebPage",
     name: `${token.name} ($${token.symbol})`,
     description: token.description ?? `${token.name} on Solana — live market data on ${SITE.name}.`,
-    url: `${SITE.url}/${locale}/token/${mint}`,
+    url: `${SITE.url}/token/${mint}`,
     inLanguage: locale,
     ...(latest?.price_usd
       ? {

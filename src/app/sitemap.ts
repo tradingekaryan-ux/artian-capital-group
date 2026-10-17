@@ -1,5 +1,4 @@
 import type { MetadataRoute } from "next";
-import { routing } from "@/i18n/routing";
 import { SITE } from "@/lib/config";
 import { supabaseAdmin } from "@/lib/db/client";
 
@@ -15,13 +14,13 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const now = new Date();
   const base = SITE.url;
 
-  const pages: MetadataRoute.Sitemap = routing.locales.flatMap((locale) =>
-    STATIC_PATHS.map(({ path, priority, changeFrequency }) => ({
-      url: `${base}/${locale}${path}`,
+  const pages: MetadataRoute.Sitemap = STATIC_PATHS.map(
+    ({ path, priority, changeFrequency }) => ({
+      url: `${base}${path}`,
       lastModified: now,
       changeFrequency,
       priority,
-    })),
+    }),
   );
 
   let tokens: { mint: string; created_at: string }[] = [];
@@ -38,14 +37,12 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     tokens = [];
   }
 
-  const tokenPages: MetadataRoute.Sitemap = routing.locales.flatMap((locale) =>
-    tokens.map((token) => ({
-      url: `${base}/${locale}/token/${token.mint}`,
-      lastModified: new Date(token.created_at),
-      changeFrequency: "hourly" as const,
-      priority: 0.6,
-    })),
-  );
+  const tokenPages: MetadataRoute.Sitemap = tokens.map((token) => ({
+    url: `${base}/token/${token.mint}`,
+    lastModified: new Date(token.created_at),
+    changeFrequency: "hourly" as const,
+    priority: 0.6,
+  }));
 
   return [...pages, ...tokenPages];
 }

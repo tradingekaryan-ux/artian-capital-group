@@ -170,7 +170,7 @@ export function CreateTokenWizard({ priceUsdc, kind = "mainnet" }: Props) {
           <>
             <h2 className="display text-2xl text-[#b91c1c]">{tc("error")}</h2>
             <p className="mt-2 text-sm text-muted-ink">
-              Pesanan gagal diproses — dana otomatis direfund ke saldo USDC-mu.
+              Order failed to process — funds were automatically refunded to your USDC balance.
             </p>
           </>
         ) : (
@@ -204,8 +204,8 @@ export function CreateTokenWizard({ priceUsdc, kind = "mainnet" }: Props) {
       <div className="p-6">
       {kind === "demo" && (
         <p className="mb-4 rounded-xl border-2 border-black bg-[#ede9fe] p-3 text-xs font-bold text-muted-ink">
-          Kamu membuat token di DEVNET (demo). Token ini tidak memiliki nilai nyata —
-          untuk latihan sebelum melakukan di mainnet.
+          You are creating this token on DEVNET (demo). This token has no real value —
+          practice here before doing it on mainnet.
         </p>
       )}
       {/* progress */}

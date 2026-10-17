@@ -36,12 +36,12 @@ export async function createWithdrawOtp(
         body: JSON.stringify({
           from: "Artian <onboarding@resend.dev>",
           to: [email],
-          subject: "Kode konfirmasi withdrawal — Artian",
-          text: `Kode konfirmasi withdrawal Anda: ${code} (berlaku ${TTL_MINUTES} menit).`,
+          subject: "Withdrawal confirmation code — Artian",
+          text: `Your Artian withdrawal code: ${code} (valid for ${TTL_MINUTES} minutes).`,
         }),
       });
     } catch (e) {
-      console.error("[otp] kirim email gagal:", e);
+      console.error("[otp] send email failed:", e);
     }
   }
   // Devnet MVP: tanpa Resend, kode dibagikan langsung ke UI agar alur tetap jalan.

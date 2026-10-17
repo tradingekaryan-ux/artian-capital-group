@@ -19,7 +19,7 @@ export function SwapCard({ feePercent }: { feePercent: number }) {
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     if (!assetValid) {
-      setError("Masukkan alamat mint token (32-64 karakter).");
+      setError("Enter a token mint address (32-64 characters).");
       return;
     }
     setBusy(true);
@@ -33,7 +33,7 @@ export function SwapCard({ feePercent }: { feePercent: number }) {
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error ?? "Error");
-      setMessage("Swap sedang diproses — akan muncul di Orders.");
+      setMessage("Swap processing — it will appear in Orders.");
       setAmount("");
       track("swap_submitted");
     } catch (err) {
@@ -46,7 +46,7 @@ export function SwapCard({ feePercent }: { feePercent: number }) {
   return (
     <div className="mt-4 flex flex-col gap-3">
       <p className="text-xs text-muted-ink">
-        Fee in-app: <strong>{feePercent}%</strong> dari hasil swap · Biaya jaringan ditanggung platform
+        In-app fee: <strong>{feePercent}%</strong> of swap output · Network gas paid from your SOL balance
       </p>
       <form onSubmit={submit} className="grid gap-3 sm:grid-cols-3">
         <div>
@@ -71,7 +71,7 @@ export function SwapCard({ feePercent }: { feePercent: number }) {
             <input
               id="s-mint"
               className="input mono text-xs"
-              placeholder="Alamat mint token milikmu…"
+              placeholder="Your token mint address…"
               value={mint}
               onChange={(e) => setMint(e.target.value.trim())}
               minLength={32}

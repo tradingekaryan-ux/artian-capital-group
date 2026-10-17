@@ -13,7 +13,7 @@ export default async function DashboardLayout({
   const { locale } = await params;
   setRequestLocale(locale);
   const user = await requireUser();
-  if (!user) redirect(`/${locale}/login`);
+  if (!user) redirect("/login");
 
   // Pastikan row profile + wallet kustodial sudah ada.
   let wallets: { id: string; kind: "mainnet" | "demo"; label: string | null; public_key: string }[] = [];
@@ -27,7 +27,7 @@ export default async function DashboardLayout({
     wallets = await listWallets(user.id);
     activeId = (await getActiveWallet(user.id)).id;
   } catch (e) {
-    console.error("[dashboard] ensure profile/wallet gagal:", e);
+    console.error("[dashboard] ensure profile/wallet failed:", e);
   }
 
   const t = await getTranslations("nav");

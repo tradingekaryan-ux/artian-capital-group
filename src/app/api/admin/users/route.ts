@@ -27,32 +27,47 @@ export async function GET(req: Request) {
     if (id) {
       const { data: list } = await db.auth.admin.listUsers({ page: 1, perPage: 200 });
       const authUser = (list?.users ?? []).find((u) => u.id === id);
-      if (!authUser) return NextResponse.json({ error: "User tidak ditemukan" }, { status: 404 });
+      if (!authUser) return NextResponse.json({ error: "User not found" }, { status: 404 });
 
-      const [{ data: profile }, { data: wallet }, { data: bal }, { data: tokens }, { data: orders }, { data: withdrawals }] =
-        await Promise.all([
-          db.from("profiles").select("*").eq("user_id", id).maybeSingle(),
-          db.from("wallets").select("public_key").eq("user_id", id).maybeSingle(),
-          db.from("balances_cache").select("usdc_raw, sol_lamports, refreshed_at").eq("user_id", id).maybeSingle(),
-          db
-            .from("tokens")
-            .select("mint, name, symbol, supply, status, created_at")
-            .eq("user_id", id)
-            .order("created_at", { ascending: false })
-            .limit(50),
-          db
-            .from("orders")
-            .select("id, service, amount_raw, status, payment_signature, created_at")
-            .eq("user_id", id)
-            .order("created_at", { ascending: false })
-            .limit(20),
-          db
-            .from("withdrawals")
-            .select("id, amount_raw, fee_raw, status, tx_signature, fee_tx, created_at")
-            .eq("user_id", id)
-            .order("created_at", { ascending: false })
-            .limit(20),
-        ]);
+      const [
+        { data: profile },
+        { data: wallets },
+        { data: bals },
+        { data: tokens },
+        { data: orders },
+        { data: withdrawals },
+      ] = await Promise.all([
+        db.from("profiles").select("*").eq("user_id", id).maybeSingle(),
+        db.from("wallets").select("id, public_key, kind").eq("user_id", id),
+        db
+          .from("balances_cache")
+          .select("wallet_id, usdc_raw, sol_lamports, refreshed_at")
+          .eq("user_id", id),
+        db
+          .from("tokens")
+          .select("mint, name, symbol, supply, status, created_at")
+          .eq("user_id", id)
+          .eq("kind", "mainnet")
+          .order("created_at", { ascending: false })
+          .limit(50),
+        db
+          .from("orders")
+          .select("id, service, amount_raw, status, payment_signature, created_at")
+          .eq("user_id", id)
+          .eq("kind", "mainnet")
+          .order("created_at", { ascending: false })
+          .limit(20),
+        db
+          .from("withdrawals")
+          .select("id, amount_raw, fee_raw, status, tx_signature, fee_tx, created_at")
+          .eq("user_id", id)
+          .order("created_at", { ascending: false })
+          .limit(20),
+      ]);
+
+      // Hanya dompet mainnet — data devnet/demo dikecualikan dari dashboard admin.
+      const wallet = (wallets ?? []).find((w) => w.kind === "mainnet") ?? null;
+      const bal = (bals ?? []).find((b) => b.wallet_id === wallet?.id) ?? null;
 
       return NextResponse.json({
         user: {
@@ -65,7 +80,7 @@ export async function GET(req: Request) {
           isSuspended: !!profile?.is_suspended,
           wallet: wallet?.public_key ?? null,
           usdcRaw: bal?.usdc_raw ?? "0",
-          solLamports: bal?.sol_lamports ?? "0",
+          solLamports: bal?.sol_lamports ?? 0,
           balanceRefreshedAt: bal?.refreshed_at ?? null,
         },
         tokens: tokens ?? [],
@@ -87,12 +102,18 @@ export async function GET(req: Request) {
       ids.length
         ? db.from("profiles").select("user_id, username, display_name, role, is_suspended").in("user_id", ids)
         : Promise.resolve({ data: [] as unknown[] }),
-      ids.length ? db.from("wallets").select("user_id, public_key").in("user_id", ids) : Promise.resolve({ data: [] as unknown[] }),
       ids.length
-        ? db.from("balances_cache").select("user_id, usdc_raw, sol_lamports").in("user_id", ids)
+        ? db.from("wallets").select("user_id, id, public_key, kind").in("user_id", ids)
         : Promise.resolve({ data: [] as unknown[] }),
-      ids.length ? db.from("tokens").select("user_id").in("user_id", ids) : Promise.resolve({ data: [] as unknown[] }),
-      ids.length ? db.from("orders").select("user_id, amount_raw, payment_signature").in("user_id", ids) : Promise.resolve({ data: [] as unknown[] }),
+      ids.length
+        ? db.from("balances_cache").select("user_id, wallet_id, usdc_raw, sol_lamports").in("user_id", ids)
+        : Promise.resolve({ data: [] as unknown[] }),
+      ids.length
+        ? db.from("tokens").select("user_id").in("user_id", ids).eq("kind", "mainnet")
+        : Promise.resolve({ data: [] as unknown[] }),
+      ids.length
+        ? db.from("orders").select("user_id, amount_raw, payment_signature").in("user_id", ids).eq("kind", "mainnet")
+        : Promise.resolve({ data: [] as unknown[] }),
     ]);
 
     const pMap = new Map(
@@ -100,12 +121,24 @@ export async function GET(req: Request) {
         (p) => [p.user_id, p],
       ),
     );
-    const wMap = new Map(
-      ((wallets.data ?? []) as Array<{ user_id: string; public_key: string }>).map((w) => [w.user_id, w]),
-    );
-    const bMap = new Map(
-      ((bals.data ?? []) as Array<{ user_id: string; usdc_raw: string; sol_lamports: number }>).map((b) => [b.user_id, b]),
-    );
+    // Hanya dompet mainnet + saldo dari dompet mainnet — devnet/demo dikecualikan.
+    const wMap = new Map<string, { id: string; public_key: string }>();
+    const mainnetWalletIds = new Set<string>();
+    for (const w of (wallets.data ?? []) as Array<{ user_id: string; id: string; public_key: string; kind: string }>) {
+      if (w.kind === "mainnet") {
+        wMap.set(w.user_id, w);
+        mainnetWalletIds.add(w.id);
+      }
+    }
+    const bMap = new Map<string, { usdc_raw: string; sol_lamports: number }>();
+    for (const b of (bals.data ?? []) as Array<{
+      user_id: string;
+      wallet_id: string;
+      usdc_raw: string;
+      sol_lamports: number;
+    }>) {
+      if (mainnetWalletIds.has(b.wallet_id)) bMap.set(b.user_id, b);
+    }
     const tCount = new Map<string, number>();
     for (const r of (tokenRows.data ?? []) as Array<{ user_id: string }>) {
       tCount.set(r.user_id, (tCount.get(r.user_id) ?? 0) + 1);
@@ -151,8 +184,8 @@ export async function GET(req: Request) {
 
     return NextResponse.json({ users: rows, page, hasMore: users.length === perPage, ...(total === 0 ? { total: 0 } : {}) });
   } catch (e) {
-    console.error("[admin] users gagal:", e);
-    return NextResponse.json({ error: "Gagal memuat pengguna" }, { status: 500 });
+    console.error("[admin] failed to load users:", e);
+    return NextResponse.json({ error: "Failed to load users" }, { status: 500 });
   }
 }
 
@@ -161,24 +194,24 @@ export async function PATCH(req: Request) {
   const admin = await requireAdmin();
   if (!admin) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   if (!(await rateLimit(`admin-patch:${admin.id}`, 60, 60_000))) {
-    return NextResponse.json({ error: "Terlalu banyak permintaan." }, { status: 429 });
+    return NextResponse.json({ error: "Too many requests." }, { status: 429 });
   }
 
   let json: unknown;
   try {
     json = await req.json();
   } catch {
-    return NextResponse.json({ error: "Body tidak valid" }, { status: 400 });
+    return NextResponse.json({ error: "Invalid request body" }, { status: 400 });
   }
   const parsed = patchSchema.safeParse(json);
   if (!parsed.success) {
-    return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Validasi gagal" }, { status: 400 });
+    return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Validation failed" }, { status: 400 });
   }
   const { userId, role, isSuspended, displayName, reindex } = parsed.data;
 
   // Admin tidak boleh menonaktifkan / menurunkan dirinya sendiri.
   if (userId === admin.id && (role === "user" || isSuspended === true)) {
-    return NextResponse.json({ error: "Tidak bisa mengubah akses akun sendiri." }, { status: 400 });
+    return NextResponse.json({ error: "You cannot change your own account access." }, { status: 400 });
   }
 
   try {
@@ -226,7 +259,7 @@ export async function PATCH(req: Request) {
 
     return NextResponse.json({ ok: true, updated, jobQueued });
   } catch (e) {
-    console.error("[admin] update user gagal:", e);
-    return NextResponse.json({ error: "Gagal mengubah pengguna" }, { status: 500 });
+    console.error("[admin] failed to update user:", e);
+    return NextResponse.json({ error: "Failed to update user" }, { status: 500 });
   }
 }

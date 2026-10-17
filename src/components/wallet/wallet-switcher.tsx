@@ -32,7 +32,7 @@ export function WalletSwitcher({ wallets, activeId }: { wallets: WalletItem[]; a
       }
       router.refresh();
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Gagal");
+      setError(e instanceof Error ? e.message : "Failed");
     } finally {
       setBusy(false);
     }

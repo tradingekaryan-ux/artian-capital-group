@@ -21,6 +21,7 @@ export async function GET() {
       db
         .from("orders")
         .select("id, service, amount_raw, status, created_at")
+        .eq("kind", "mainnet")
         .order("created_at", { ascending: false })
         .limit(20),
       db
@@ -61,7 +62,7 @@ export async function GET() {
       treasury,
     });
   } catch (e) {
-    console.error("[admin] overview gagal:", e);
-    return NextResponse.json({ error: "Gagal memuat overview" }, { status: 500 });
+    console.error("[admin] overview failed:", e);
+    return NextResponse.json({ error: "Failed to load overview" }, { status: 500 });
   }
 }

@@ -55,7 +55,7 @@ export function WithdrawCard({ feeUsdc }: Props) {
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error ?? "Error");
-      setMessage("Withdrawal diproses — cek status di halaman Orders.");
+      setMessage("Withdrawal processing — check status on the Orders page.");
       setWithdrawalId(null);
       setOtp("");
       track("withdraw_confirmed");
@@ -69,7 +69,7 @@ export function WithdrawCard({ feeUsdc }: Props) {
   return (
     <div className="mt-4 flex flex-col gap-3">
       <p className="text-xs text-muted-ink">
-        {t("withdrawFee")}: <strong>{feeUsdc} USDC</strong> · Biaya jaringan ditanggung platform
+        {t("withdrawFee")}: <strong>{feeUsdc} USDC</strong> · Network gas paid from your SOL balance
       </p>
       {withdrawalId === null ? (
         <form onSubmit={requestWithdraw} className="flex flex-col gap-3">

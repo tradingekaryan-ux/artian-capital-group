@@ -11,17 +11,17 @@ export async function POST(req: Request) {
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   if (!(await rateLimit(`watch:${user.id}`, 30, 60_000))) {
-    return NextResponse.json({ error: "Terlalu cepat." }, { status: 429 });
+    return NextResponse.json({ error: "Too fast." }, { status: 429 });
   }
 
   let json: unknown;
   try {
     json = await req.json();
   } catch {
-    return NextResponse.json({ error: "Body tidak valid" }, { status: 400 });
+    return NextResponse.json({ error: "Invalid request body" }, { status: 400 });
   }
   const parsed = bodySchema.safeParse(json);
-  if (!parsed.success) return NextResponse.json({ error: "Validasi gagal" }, { status: 400 });
+  if (!parsed.success) return NextResponse.json({ error: "Validation failed" }, { status: 400 });
 
   const db = supabaseAdmin();
   const { data: existing } = await db
@@ -44,7 +44,7 @@ export async function POST(req: Request) {
     .from("watchlists")
     .insert({ user_id: user.id, mint: parsed.data.mint });
   if (error && error.code !== "23505") {
-    return NextResponse.json({ error: "Gagal menyimpan" }, { status: 500 });
+    return NextResponse.json({ error: "Failed to save" }, { status: 500 });
   }
   return NextResponse.json({ watching: true });
 }

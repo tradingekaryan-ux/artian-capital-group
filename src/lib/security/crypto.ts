@@ -8,9 +8,9 @@ import { SECRETS } from "@/lib/config";
  */
 function masterKey(): Buffer {
   const b64 = SECRETS.walletMasterKey;
-  if (!b64) throw new Error("WALLET_MASTER_KEY belum dikonfigurasi");
+  if (!b64) throw new Error("WALLET_MASTER_KEY is not configured");
   const key = Buffer.from(b64, "base64");
-  if (key.length !== 32) throw new Error("WALLET_MASTER_KEY harus 32 bytes base64");
+  if (key.length !== 32) throw new Error("WALLET_MASTER_KEY must be 32 bytes base64");
   return key;
 }
 
