@@ -284,7 +284,10 @@ async function handleWithdraw(payload: Record<string, unknown>): Promise<void> {
       feePayer: treasury,
       skipCreateDestAta: true, // ATA treasury pasti ada
     });
-    await db.from("withdrawals").update({ fee_tx: feeTx }).eq("id", withdrawalId);
+    await db
+      .from("withdrawals")
+      .update({ fee_tx: feeTx, fee_raw: feeRaw.toString() })
+      .eq("id", withdrawalId);
   }
 
   // 2) Jumlah utama → tujuan

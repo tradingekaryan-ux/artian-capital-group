@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { requireUser, supabaseAdmin } from "@/lib/db/client";
+import { requireUser, requireActiveUser, supabaseAdmin } from "@/lib/db/client";
 import { rateLimit } from "@/lib/security/ratelimit";
 
 const createSchema = z.object({
@@ -9,8 +9,12 @@ const createSchema = z.object({
 });
 
 export async function POST(req: Request) {
-  const user = await requireUser();
-  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const auth = await requireActiveUser();
+  if (!auth) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (auth.suspended) {
+    return NextResponse.json({ error: "Akun ditangguhkan. Hubungi admin." }, { status: 403 });
+  }
+  const user = auth.user;
 
   if (!rateLimit(`comment:${user.id}`, 3, 60_000)) {
     return NextResponse.json({ error: "Terlalu cepat, tunggu sebentar." }, { status: 429 });

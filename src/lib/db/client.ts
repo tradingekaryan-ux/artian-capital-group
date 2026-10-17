@@ -59,3 +59,27 @@ export async function requireUser() {
   } = await supabase.auth.getUser();
   return user;
 }
+
+/**
+ * User login + cek status suspend admin.
+ * Return null bila belum login; `{ user, suspended }` jika login
+ * (suspended=true → route mutasi wajib balas 403).
+ */
+export async function requireActiveUser(): Promise<{
+  user: NonNullable<Awaited<ReturnType<typeof requireUser>>>;
+  suspended: boolean;
+} | null> {
+  const user = await requireUser();
+  if (!user) return null;
+  try {
+    const { data } = await supabaseAdmin()
+      .from("profiles")
+      .select("is_suspended")
+      .eq("user_id", user.id)
+      .maybeSingle();
+    return { user, suspended: !!data?.is_suspended };
+  } catch {
+    // profiles belum ada (user baru) → anggap aktif; ensureProfile menyusul.
+    return { user, suspended: false };
+  }
+}

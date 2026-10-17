@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { getTranslations, setRequestLocale } from "next-intl/server";
-import { requireUser } from "@/lib/db/client";
+import { requireUser, supabaseAdmin } from "@/lib/db/client";
 import { ensureProfile } from "@/lib/profiles";
 import { ensureWallet } from "@/lib/solana/wallet";
 import { Subnav } from "@/components/subnav";
@@ -32,6 +32,20 @@ export default async function DashboardLayout({
     { href: "/dashboard/orders", label: t("orders") },
     { href: "/dashboard/tokens", label: t("myTokens") },
   ];
+
+  // Tautan Admin hanya untuk akun ber-role admin.
+  try {
+    const { data: profile } = await supabaseAdmin()
+      .from("profiles")
+      .select("role")
+      .eq("user_id", user.id)
+      .maybeSingle();
+    if (profile?.role === "admin") {
+      items.push({ href: "/admin", label: t("admin") });
+    }
+  } catch {
+    /* profiles belum ada — tanpa tautan admin */
+  }
 
   return (
     <div className="flex flex-col gap-6">

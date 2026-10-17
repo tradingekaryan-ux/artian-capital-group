@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { requireUser, supabaseAdmin } from "@/lib/db/client";
+import { requireActiveUser, supabaseAdmin } from "@/lib/db/client";
 import { verifyWithdrawOtp } from "@/lib/security/otp";
 import { enqueue } from "@/lib/jobs/queue";
 import { audit } from "@/lib/security/audit";
@@ -12,8 +12,12 @@ const bodySchema = z.object({
 });
 
 export async function POST(req: Request) {
-  const user = await requireUser();
-  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const auth = await requireActiveUser();
+  if (!auth) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (auth.suspended) {
+    return NextResponse.json({ error: "Akun ditangguhkan. Hubungi admin." }, { status: 403 });
+  }
+  const user = auth.user;
 
   const ip = clientIp(req);
   if (!rateLimit(`withdraw-verify:${user.id}`, 10, 3_600_000)) {

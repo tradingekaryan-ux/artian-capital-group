@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { PublicKey } from "@solana/web3.js";
-import { requireUser, supabaseAdmin } from "@/lib/db/client";
+import { requireActiveUser, supabaseAdmin } from "@/lib/db/client";
 import { ensureWallet, readOnChainBalances, getWalletPublicKey } from "@/lib/solana/wallet";
 import { rpcRead } from "@/lib/solana/connection";
 import { rateLimit, clientIp } from "@/lib/security/ratelimit";
@@ -16,8 +16,12 @@ const bodySchema = z.object({
 });
 
 export async function POST(req: Request) {
-  const user = await requireUser();
-  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const auth = await requireActiveUser();
+  if (!auth) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (auth.suspended) {
+    return NextResponse.json({ error: "Akun ditangguhkan. Hubungi admin." }, { status: 403 });
+  }
+  const user = auth.user;
 
   const ip = clientIp(req);
   if (!rateLimit(`swap:${user.id}`, LIMITS.orderPerHour, 3_600_000)) {
