@@ -87,6 +87,25 @@ export function swapFeeRaw(inAmountRaw: bigint, percent: number, minUsdc: number
   return fee > min ? fee : min;
 }
 
+/**
+ * Estimasi minimum saldo SOL (dalam SOL, sudah termasuk buffer) yang harus
+ * dimiliki wallet user PER LAYANAN — gas on-chain dibayar langsung dari saldo
+ * SOL user (wallet user = fee-payer), platform tidak mendanai treasury.
+ * Dipakai sebagai preflight sebelum order dibuat/dibayar (402 bila kurang).
+ */
+export const SOL_REQUIREMENT: Record<ServiceKey, number> = {
+  create_token: 0.03, // bayar fee + mint rent + metadata + ATA + gas, buffer
+  create_pool: 0.31, // bayar fee + protokol CPMM 0.15 SOL + rent pool/vault + buffer
+  add_liquidity: 0.01,
+  remove_liquidity: 0.01,
+  swap: 0.01,
+  withdraw: 0.01, // transfer fee + transfer utama + buffer
+};
+
+export function requiredSolFor(service: ServiceKey): number {
+  return SOL_REQUIREMENT[service] ?? 0.01;
+}
+
 /** Total biaya withdrawal = flat + (buffer jaringan opsional). */
 export async function withdrawFeeRaw(): Promise<bigint> {
   const row = await getPrice("withdraw");

@@ -65,18 +65,23 @@ export async function completeJob(id: number): Promise<void> {
 }
 
 const MAX_ATTEMPTS = 3;
+/** Refund diberi jendela panjang: gas refund dari saldo SOL user — bila habis,
+ * user perlu waktu mengisi SOL lagi sebelum refund bisa dieksekusi. */
+const REFUND_MAX_ATTEMPTS = 60;
 
 /** @returns true bila job permanen gagal (tidak akan di-retry lagi). */
 export async function failJob(job: JobRow, error: string): Promise<boolean> {
   const db = supabaseAdmin();
-  if (job.attempts < MAX_ATTEMPTS) {
-    // retry dengan backoff 30s × attempts
+  const maxAttempts = job.type === "refund" ? REFUND_MAX_ATTEMPTS : MAX_ATTEMPTS;
+  if (job.attempts < maxAttempts) {
+    // retry: backoff 30s × attempts (refund: 60s × attempts)
+    const backoffMs = (job.type === "refund" ? 60_000 : 30_000) * job.attempts;
     await db
       .from("jobs")
       .update({
         status: "pending",
         last_error: error,
-        run_at: new Date(Date.now() + job.attempts * 30_000).toISOString(),
+        run_at: new Date(Date.now() + backoffMs).toISOString(),
       })
       .eq("id", job.id);
     return false;

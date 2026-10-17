@@ -10,7 +10,7 @@ import {
   getWalletById,
 } from "@/lib/solana/wallet";
 import { keypairFromEncrypted } from "@/lib/solana/keypair";
-import { getTreasury, sendUsdcTransfer, usdcAtaOf } from "@/lib/chain/usdc";
+import { getTreasury, sendUsdcTransfer } from "@/lib/chain/usdc";
 import { createSplToken } from "@/lib/chain/token-create";
 import { uploadTokenAssets } from "@/lib/chain/assets";
 import {
@@ -18,9 +18,9 @@ import {
   addLiquidity as poolAddLiquidity,
   removeLiquidity as poolRemoveLiquidity,
 } from "@/lib/chain/pool";
-import { executeSwapToUsdc, gasDrop } from "@/lib/chain/swap";
+import { executeSwapToUsdc } from "@/lib/chain/swap";
 import { rpcRead } from "@/lib/solana/connection";
-import { SOL_MINT, usdcMintFor, LAMPORTS_PER_SOL, type WalletKind } from "@/lib/config";
+import { usdcMintFor, type WalletKind } from "@/lib/config";
 import {
   completeJob,
   claimPendingJobs,
@@ -30,7 +30,7 @@ import {
   type JobType,
 } from "@/lib/jobs/queue";
 import { fetchMarketSummary, saveSnapshot } from "@/lib/market";
-import { rawToUsdc, uiToRaw, withdrawFeeRaw } from "@/lib/payment/pricing";
+import { uiToRaw, withdrawFeeRaw } from "@/lib/payment/pricing";
 import { failOrder } from "@/lib/payment/orders";
 import type { WalletRow } from "@/lib/solana/wallet";
 
@@ -333,6 +333,7 @@ async function handleWithdraw(payload: Record<string, unknown>): Promise<void> {
   const treasury = getTreasury("mainnet");
 
   // 1) Fee flat → treasury (DIKUMPULKAN — sebelumnya fee tidak pernah ditarik).
+  //    Gas fee tx & tx utama dibayar dari saldo SOL user (fee-payer = owner).
   //    Idempotensi: fee_tx dicatat; retry melewati langkah ini bila sudah terkirim.
   const feeRaw = await withdrawFeeRaw();
   let feeTx: string | null = w.fee_tx ?? null;
@@ -341,7 +342,7 @@ async function handleWithdraw(payload: Record<string, unknown>): Promise<void> {
       from: owner,
       toOwner: treasury.publicKey,
       amountRaw: feeRaw,
-      feePayer: treasury,
+      feePayer: owner,
       skipCreateDestAta: true, // ATA treasury pasti ada
       kind: "mainnet",
     });
@@ -356,7 +357,7 @@ async function handleWithdraw(payload: Record<string, unknown>): Promise<void> {
     from: owner,
     toOwner: destination,
     amountRaw: BigInt(w.amount_raw as string),
-    feePayer: treasury,
+    feePayer: owner,
     kind: "mainnet",
   });
   await db
@@ -390,8 +391,8 @@ async function handleSwap(payload: Record<string, unknown>): Promise<void> {
 
   // Wallet aktif saat request sudah tercatat di orders.wallet_id — pakai itu
   // (bukan wallet tertua) agar konsisten dengan cek saldo di route.
+  // Gas swap dari saldo SOL user (preflight di route swap); tanpa gas-drop.
   const owner = await keypairForOrder(order, "mainnet");
-  await gasDrop(owner.publicKey.toBase58(), 2_000_000, "mainnet"); // SOL kecil untuk fee swap
   const res = await executeSwapToUsdc({
     owner,
     inputMint: cfg.inputMint,
@@ -421,7 +422,7 @@ async function handleSwap(payload: Record<string, unknown>): Promise<void> {
         from: owner,
         toOwner: treasury.publicKey,
         amountRaw: feeRaw,
-        feePayer: treasury,
+        feePayer: owner,
         kind: "mainnet",
       });
       void sig;
@@ -454,26 +455,29 @@ async function handleRefund(payload: Record<string, unknown>): Promise<void> {
     return;
   }
   const kind: WalletKind = order.kind === "demo" ? "demo" : "mainnet";
-  let wallet: { id: string; public_key: string } | null = null;
+  let wallet: WalletRow | null = null;
   if (order.wallet_id) {
     wallet = await getWalletById(String(order.wallet_id));
   } else {
-    const { data: row, error } = await db
+    const { data, error } = await db
       .from("wallets")
-      .select("id, public_key")
+      .select("*")
       .eq("user_id", order.user_id)
       .eq("kind", kind)
       .maybeSingle();
     if (error) throw error;
-    wallet = row;
+    wallet = data as WalletRow | null;
   }
   if (!wallet) throw new Error("wallet user tidak ditemukan untuk refund");
   const treasury = getTreasury(kind);
+  // Gas refund dari saldo SOL user (fee-payer = user) — job refund punya
+  // retry panjang (lihat queue.failJob) agar user sempat mengisi SOL bila habis.
+  const userKp = keypairFromEncrypted(wallet);
   const sig = await sendUsdcTransfer({
     from: treasury,
     toOwner: new PublicKey(wallet.public_key),
     amountRaw: amount,
-    feePayer: treasury,
+    feePayer: userKp,
     kind,
   });
   await db
@@ -578,20 +582,11 @@ async function handlePriceSnapshot(): Promise<void> {
   }
 }
 
-/* ───────────────── treasury_rebalance ───────────────── */
+/* ───────────────── treasury_rebalance (DIMATIKAN) ───────────────── */
+/** Tidak dipakai lagi: treasury tidak membayar gas (wallet user = fee-payer),
+ * jadi tidak perlu mengisi float SOL. Handler dibuat no-op agar job lama aman. */
 async function handleTreasuryRebalance(): Promise<void> {
-  const treasury = getTreasury();
-  const solBalance = await rpcRead((c) => c.getBalance(treasury.publicKey));
-  const warn = 0.3 * LAMPORTS_PER_SOL;
-  if (solBalance >= warn) return;
-  // tukar 5 USDC milik treasury → SOL (fee payer = treasury sendiri, masih ada SOL sisa)
-  const target = 1.0 * LAMPORTS_PER_SOL;
-  const deficitLamports = target - solBalance;
-  const solPriceUsd = 150; // perkiraan konservatif; idealnya dari price API
-  const usdcNeeded = Math.ceil((deficitLamports / LAMPORTS_PER_SOL) * solPriceUsd * 10 ** 6);
-  await gasDrop(treasury.publicKey.toBase58(), deficitLamports);
-  void usdcNeeded;
-  void rawToUsdc;
+  return;
 }
 
 const handlers: Record<JobType, Handler> = {
@@ -633,7 +628,8 @@ export async function runPendingJobs(limit = 5): Promise<{ done: number; failed:
 /** Jadwalkan job berkala (idempoten: hanya bila tidak ada job serupa pending). */
 export async function maybeScheduleCyclic(): Promise<void> {
   const db = supabaseAdmin();
-  for (const type of ["price_snapshot", "treasury_rebalance"] as const) {
+  // treasury_rebalance tidak lagi dijadwalkan — treasury tidak membayar gas.
+  for (const type of ["price_snapshot"] as const) {
     const { data } = await db
       .from("jobs")
       .select("id")
@@ -662,5 +658,3 @@ async function onPermanentFailure(job: JobRow, msg: string): Promise<void> {
     console.error("[runner] onPermanentFailure gagal:", e);
   }
 }
-
-export { usdcAtaOf, SOL_MINT };

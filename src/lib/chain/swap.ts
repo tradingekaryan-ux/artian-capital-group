@@ -1,12 +1,12 @@
 import { Keypair, VersionedTransaction } from "@solana/web3.js";
 import { getConnection } from "@/lib/solana/connection";
-import { JUPITER, type WalletKind } from "@/lib/config";
+import { JUPITER } from "@/lib/config";
 
 /**
  * Swap in-app via Jupiter Aggregator (REST).
- * Model gas: treasury mengirim "gas drop" SOL kecil ke wallet user sebelum swap,
- * lalu transaksi Jupiter ditandatangani user (fee payer = user).
- * Dust SOL yang tersisa tercakup oleh fee swap platform (0.30%).
+ * Model gas: transaksi Jupiter ditandatangani user dengan fee-payer = user —
+ * gas dibayar dari saldo SOL milik user (preflight cek saldo SOL di route).
+ * Dust SOL tersisa tercakup oleh fee swap platform (0.30%).
  */
 
 export interface QuoteResponse {
@@ -75,27 +75,4 @@ export async function executeSwapToUsdc(params: {
   const latest = await connection.getLatestBlockhash();
   await connection.confirmTransaction({ signature: sig, ...latest }, "confirmed");
   return { outAmount: quote.outAmount, txSignature: sig };
-}
-
-/** Gas drop: treasury kirim sedikit SOL ke user untuk fee swap. */
-export async function gasDrop(
-  userOwner: string,
-  lamports = 2_000_000,
-  kind: WalletKind = "mainnet",
-): Promise<void> {
-  const { SystemProgram, Transaction, sendAndConfirmTransaction } = await import(
-    "@solana/web3.js"
-  );
-  const { PublicKey } = await import("@solana/web3.js");
-  const { getTreasury } = await import("@/lib/chain/usdc");
-  const treasury = getTreasury(kind);
-  const tx = new Transaction().add(
-    SystemProgram.transfer({
-      fromPubkey: treasury.publicKey,
-      toPubkey: new PublicKey(userOwner),
-      lamports,
-    }),
-  );
-  const conn = getConnection(kind);
-  await sendAndConfirmTransaction(conn, tx, [treasury], { commitment: "confirmed" });
 }

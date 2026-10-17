@@ -6,8 +6,8 @@ import { getActiveWallet, readOnChainBalances } from "@/lib/solana/wallet";
 import { createWithdrawOtp } from "@/lib/security/otp";
 import { rateLimit, clientIp } from "@/lib/security/ratelimit";
 import { audit } from "@/lib/security/audit";
-import { getPrice, usdcToRaw } from "@/lib/payment/pricing";
-import { LIMITS } from "@/lib/config";
+import { getPrice, usdcToRaw, requiredSolFor } from "@/lib/payment/pricing";
+import { LIMITS, LAMPORTS_PER_SOL } from "@/lib/config";
 
 const bodySchema = z.object({
   amount_usdc: z.number().positive().max(1_000_000),
@@ -76,6 +76,17 @@ export async function POST(req: Request) {
           code: "INSUFFICIENT_BALANCE",
           balanceUsdc: Number(balances.usdcRaw) / 1e6,
           requiredUsdc: Number(totalRaw) / 1e6,
+        },
+        { status: 402 },
+      );
+    }
+    // Gas penarikan dibayar dari saldo SOL user (fee-payer = user) — preflight.
+    const requiredSol = requiredSolFor("withdraw");
+    if (balances.solLamports < BigInt(Math.ceil(requiredSol * LAMPORTS_PER_SOL))) {
+      return NextResponse.json(
+        {
+          error: `Saldo SOL tidak cukup untuk gas penarikan (butuh ±${requiredSol} SOL). Deposit SOL dulu, lalu coba lagi.`,
+          code: "INSUFFICIENT_SOL",
         },
         { status: 402 },
       );

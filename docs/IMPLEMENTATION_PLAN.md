@@ -21,7 +21,7 @@
 | Hosting | **Cloudflare Workers (via `@opennextjs/cloudflare`)** | Tier gratis, **boleh dipakai komersial**, CDN global, WebSocket/polling cukup | **Vercel Hobby — ditolak: ToS melarang pemakaian komersial**; Netlify (boleh, tapi Cloudflare lebih murah di egress) |
 | Database + Auth + Storage | **Supabase Free** (Postgres, Auth, Storage, RLS) | Semua kebutuhan inti dalam 1 layanan gratis: 500MB DB, 50k MAU, 1GB storage, 500k edge fn | Neon+Clerk (dua vendor), Firebase (vendor lock-in kuat) |
 | RPC Solana | **Helius Free** (10 RPS, 1M credit/bln) + fallback `api.mainnet-beta.solana.com` | DAS API & priority fee tersedia gratis | RPC publik saja (gampang kena 429) |
-| Token creation | **Metaplex umi** (`umi-bundle-defaults` + `mpl-token-metadata`) di atas `@solana/web3.js` + `@solana/spl-token` | Satu alur `createV1` (mint+metadata) + instruksi SPL; payer treasury, authority → wallet user | Instruksi legacy manual (kode lebih panjang, rawan salah urutan); Token-2022 metadata extension (kompatibilitas wallet/DEX lebih berisiko) |
+| Token creation | **Metaplex umi** (`umi-bundle-defaults` + `mpl-token-metadata`) di atas `@solana/web3.js` + `@solana/spl-token` | Satu alur `createV1` (mint+metadata) + instruksi SPL; **payer & authority = wallet user** (gas dari saldo SOL user) | Instruksi legacy manual (kode lebih panjang, rawan salah urutan); Token-2022 metadata extension (kompatibilitas wallet/DEX lebih berisiko) |
 | Liquidity pool | **Raydium SDK v2 (CPMM)** | Dokumentasi lengkap, permissionless, dukungan Token-2022, biaya pembuatan pool ~0.2 SOL | AMM v4 (butuh OpenBook market, lebih mahal); **spike F4** membandingkan Meteora DAMM v2 & Orca untuk biaya termurah |
 | Swap | **Jupiter Aggregator API** (free key) | Rute terbaik, endpoint `/swap` siap pakai, gratis | Orca/Raydium swap langsung (rute terbatas) |
 | Market data | **DexScreener API + Jupiter Price API** + snapshot internal | Gratis, tanpa kartu kredit | Birdeye (butuh API key berbayar untuk kuota besar) |
@@ -51,11 +51,12 @@
                     └────────────▲─────────┘            │
                                  │            ┌──────────▼───────────┐
                     ┌────────────┴─────────┐  │ Treasury hot wallet  │
-                    │ GitHub Actions Worker│─▶│ (payer semua gas)    │
-                    │ - job queue runner   │  │ + wallet user (kust.)│
-                    │ - price snapshot     │  └──────────────────────┘
-                    │ - indexer heartbeat  │  │ Jupiter / Raydium /  │
-                    └──────────────────────┘  │ DexScreener API      │
+                    │ GitHub Actions Worker│─▶│ (penerima fee USDC + │
+                    │ - job queue runner   │  │  sumber refund)      │
+                    │ - price snapshot     │  │ gas = saldo SOL user │
+                    │ - indexer heartbeat  │  └──────────────────────┘
+                    └──────────────────────┘  │ Jupiter / Raydium /  │
+                                              │ DexScreener API      │
                                               └──────────────────────┘
 ```
 
@@ -63,16 +64,16 @@
 
 ### 2.1 Alur penting
 1. **Registrasi** → Supabase Auth (OTP email) → saat first-login, `ensureProfile`/`ensureWallet` (`src/lib/profiles.ts`) membuat `profiles` + `wallets` (keypair baru, dienkripsi) dari aplikasi — sengaja **tanpa trigger DB** `handle_new_user` agar seluruh bootstrap bisa diuji/di-debug di satu lapisan code.
-2. **Topup** → user kirim USDC ke ATA miliknya → indexer menangkap mutasi → `wallet_events` + `balances_cache`.
-3. **Order create token** → API cek saldo → transfer USDC user→treasury (tx #1, `awaiting_payment→paid`) → job `create_token` → worker: upload metadata → bangun tx (mint+metadata+ATA+supply, payer=treasury) → kirim → `confirmed` → row `tokens` + halaman `/token/{mint}`.
-4. **LP** → order `create_pool` (tx bayar fee) → job → worker Raydium `cpmm.createPool` → LP token ke wallet user → row `pools`.
-5. **Withdrawal** → OTP → job → tx transfer USDC dari wallet user ke tujuan (fee payer treasury) → `confirmed`.
+2. **Topup** → user kirim **USDC** (fee layanan) & **SOL** (gas) ke alamat miliknya → indexer menangkap mutasi → `wallet_events` + `balances_cache`.
+3. **Order create token** → API cek saldo **USDC + preflight SOL** (`requiredSolFor`) → transfer USDC user→treasury (tx #1, `awaiting_payment→paid`; fee-payer = user) → job `create_token` → worker: upload metadata → bangun tx (mint+metadata+ATA+supply, **payer & authority = wallet user**) → kirim → `confirmed` → row `tokens` + halaman `/token/{mint}`.
+4. **LP** → order `create_pool` (tx bayar fee) → job → worker Raydium `cpmm.createPool` (gas dari saldo SOL user; tanpa gas-drop) → LP token ke wallet user → row `pools`.
+5. **Withdrawal** → OTP → job → tx transfer USDC dari wallet user ke tujuan (**fee payer = wallet user**) → `confirmed`.
 6. **Mode demo (devnet)** → user buat/aktifkan wallet demo (maks 1) → faucet manual SOL+USDC devnet (user tempel alamatnya di faucet.solana.com / faucet.circle.com) → order `create_token`/`create_pool`/`add_liquidity` dibayar **USDC devnet** dari wallet demo ke treasury devnet → job memakai RPC/program devnet (`networkFor("demo")`) → row `tokens`/`pools` bertanda `kind='demo'` (tersembunyi dari explore). Tanpa withdraw/swap di mode demo.
 
 ### 2.2 Keamanan signing service
 - Master key enkripsi (`WALLET_MASTER_KEY`, 32 byte base64) hanya di secrets runtime.
 - Dekripsi dilakukan **sesingkat mungkin** di memori (decode → tanda tangan → buang), tidak pernah di-log/di-cache.
-- Treasury key (`TREASURY_SECRET_KEY`) terpisah dari key user; disimpan terenkripsi dengan master key yang sama, diarahkan lewat env.
+- Treasury key (`TREASURY_SECRET_KEY`) terpisah dari key user; disimpan terenkripsi dengan master key yang sama, diarahkan lewat env. Treasury hanya menandatangani transaksi penerimaan fee & refund — **bukan** fee-payer transaksi user (gas = saldo SOL user).
 - Setiap pemakaian dicatat `audit_logs` (aksi, target, tx signature, IP).
 
 ---
@@ -262,7 +263,7 @@ jobs(id bigserial, type, payload jsonb, status, attempts int default 0, run_at, 
 | Integration (tertunda) | Vitest + mock RPC | token-create tx builder (assert instruksi), withdrawal flow |
 | E2E manual (tertunda) | `scripts/devnet-smoke.ts` | topup→create token→pool→swap→withdraw di devnet |
 | CI ✅ | GitHub Actions `ci.yml` | `lint`, `test`, `typecheck` (`next typegen && tsc`), `build` tiap push/PR — Node 22 |
-| Post-deploy | worker cron tiap menit | sentuh DB tiap menit (de facto heartbeat, PRD §10 R5) + jalankan job siklis `price_snapshot`, `treasury_rebalance` |
+| Post-deploy | worker cron tiap menit | sentuh DB tiap menit (de facto heartbeat, PRD §10 R5) + jalankan job siklis `price_snapshot` |
 
 Definisi selesai per fase: **CI hijau + exit criteria fase terpenuhi** (exit on-chain/devnet masih tertunda — lihat blok status §6).
 
@@ -282,7 +283,7 @@ Definisi selesai per fase: **CI hijau + exit criteria fase terpenuhi** (exit on-
 | Item | Biaya platform | Ditalangi user via |
 |---|---|---|
 | Hosting, DB, auth, storage, RPC, data pasar, job runner | **$0** | — |
-| Gas on-chain semua transaksi | dari treasury (USDC) | harga layanan (buffer 15%) |
+| Gas on-chain semua transaksi (fee & rent) | **$0** — dibayar user dari saldo SOL miliknya (platform tidak mendanai gas) | — (user deposit SOL sendiri) |
 | Metadata permanen (Arweave) — opsional F7 | ~$0.01–0.10/token | biaya create token |
 
 ---

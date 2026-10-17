@@ -8,8 +8,8 @@ import {
 } from "@/lib/solana/wallet";
 import { getTreasury, sendUsdcTransfer } from "@/lib/chain/usdc";
 import { enqueue, type JobType } from "@/lib/jobs/queue";
-import { getPrice, usdcToRaw, type ServiceKey } from "@/lib/payment/pricing";
-import type { WalletKind } from "@/lib/config";
+import { getPrice, usdcToRaw, requiredSolFor, type ServiceKey } from "@/lib/payment/pricing";
+import { LAMPORTS_PER_SOL, type WalletKind } from "@/lib/config";
 
 const SERVICE_JOB: Partial<Record<ServiceKey, JobType>> = {
   create_token: "create_token",
@@ -32,9 +32,11 @@ export interface CreateOrderInput {
 /**
  * Buat order + bayar langsung dari saldo USDC user → treasury (on-chain),
  * lalu antrikan job pekerjaan on-chain.
+ * Gas on-chain (pembayaran, pekerjaan, refund) = wallet user sebagai fee-payer
+ * dari saldo SOL miliknya — preflight SOL di atas mencegah order gagal di tengah.
  * Khusus `swap`: fee diambil dari hasil swap (tidak dibayar di muka).
  * Untuk `kind: "demo"`: pembayaran & pekerjaan on-chain berjalan di devnet
- * (USDC devnet dari wallet demo → treasury devnet).
+ * (USDC devnet dari wallet demo → treasury devnet; gas dari SOL devnet user).
  */
 /**
  * Wallet sumber dana order: UTAMAKAN wallet aktif (cookie `wid`) bila jenisnya
@@ -72,16 +74,24 @@ export async function createAndPayOrder(input: CreateOrderInput) {
   const payUpfront = feeRaw > 0n && input.service !== "swap";
 
   // Cek saldo dulu agar 402 bersih tanpa menyisipkan row order.
-  if (payUpfront) {
-    const balances = await readOnChainBalances(wallet.public_key, kind);
-    if (balances.usdcRaw < feeRaw) {
-      throw new OrderError(
-        "INSUFFICIENT_BALANCE",
-        kind === "demo"
-          ? "Saldo USDC devnet tidak cukup. Isi dulu lewat faucet (lihat halaman Wallet demo)."
-          : "Saldo USDC tidak cukup untuk membayar layanan.",
-      );
-    }
+  // SOL = gas on-chain (dibayar dari saldo user; platform tidak mendanai treasury).
+  const balances = await readOnChainBalances(wallet.public_key, kind);
+  if (payUpfront && balances.usdcRaw < feeRaw) {
+    throw new OrderError(
+      "INSUFFICIENT_BALANCE",
+      kind === "demo"
+        ? "Saldo USDC devnet tidak cukup. Isi dulu lewat faucet (lihat halaman Wallet demo)."
+        : "Saldo USDC tidak cukup untuk membayar layanan.",
+    );
+  }
+  const requiredSol = requiredSolFor(input.service);
+  if (balances.solLamports < BigInt(Math.ceil(requiredSol * LAMPORTS_PER_SOL))) {
+    throw new OrderError(
+      "INSUFFICIENT_SOL",
+      kind === "demo"
+        ? `Saldo SOL devnet tidak cukup untuk gas transaksi (butuh ±${requiredSol} SOL). Isi lewat faucet SOL, lalu coba lagi.`
+        : `Saldo SOL tidak cukup untuk gas on-chain (butuh ±${requiredSol} SOL). Deposit SOL ke alamat dompetmu dulu, lalu coba lagi.`,
+    );
   }
 
   // Catat order SEBELUM bayar — jejak tetap ada walau pembayaran on-chain gagal.
@@ -124,7 +134,7 @@ export async function createAndPayOrder(input: CreateOrderInput) {
         from: userKp,
         toOwner: treasury.publicKey,
         amountRaw: feeRaw,
-        feePayer: treasury,
+        feePayer: userKp, // gas dibayar user (satu signer)
         kind,
       });
     } catch (e) {

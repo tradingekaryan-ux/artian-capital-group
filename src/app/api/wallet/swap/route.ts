@@ -6,7 +6,7 @@ import { getActiveWallet, readOnChainBalances } from "@/lib/solana/wallet";
 import { rpcRead } from "@/lib/solana/connection";
 import { rateLimit, clientIp } from "@/lib/security/ratelimit";
 import { audit } from "@/lib/security/audit";
-import { getPrice, swapFeeRaw } from "@/lib/payment/pricing";
+import { getPrice, swapFeeRaw, requiredSolFor } from "@/lib/payment/pricing";
 import { enqueue } from "@/lib/jobs/queue";
 import { SOL_MINT, LAMPORTS_PER_SOL, LIMITS } from "@/lib/config";
 
@@ -53,6 +53,19 @@ export async function POST(req: Request) {
     // Selalu pakai wallet AKTIF (sudah pasti mainnet — demo ditolak di atas):
     // konsisten dengan cek saldo & sumber dana eksekusi job.
     const owner = new PublicKey(wallet.public_key);
+    // Preflight gas: transaksi swap ditandatangani user (fee-payer = user) —
+    // wajib ada SOL di wallet sebelum order dibuat.
+    const balances = await readOnChainBalances(wallet.public_key, "mainnet");
+    const requiredSol = BigInt(Math.ceil(requiredSolFor("swap") * LAMPORTS_PER_SOL));
+    if (balances.solLamports < requiredSol) {
+      return NextResponse.json(
+        {
+          error: `Saldo SOL tidak cukup untuk gas swap (butuh ±${requiredSolFor("swap")} SOL). Deposit SOL dulu, lalu coba lagi.`,
+          code: "INSUFFICIENT_SOL",
+        },
+        { status: 402 },
+      );
+    }
 
     let inputMint = asset;
     let amountRaw: bigint;
@@ -61,9 +74,11 @@ export async function POST(req: Request) {
     if (isSol) {
       inputMint = SOL_MINT;
       amountRaw = BigInt(Math.round(amount * LAMPORTS_PER_SOL));
-      const balances = await readOnChainBalances(wallet.public_key, "mainnet");
-      if (balances.solLamports < amountRaw + BigInt(0.01 * LAMPORTS_PER_SOL)) {
-        return NextResponse.json({ error: "Saldo SOL tidak cukup (butuh sedikit SOL untuk fee)." }, { status: 402 });
+      if (balances.solLamports < amountRaw + requiredSol) {
+        return NextResponse.json(
+          { error: "Saldo SOL tidak cukup (butuh sedikit SOL untuk fee).", code: "INSUFFICIENT_SOL" },
+          { status: 402 },
+        );
       }
     } else {
       // hanya token buatan user yang didukung (kita tahu decimals-nya)

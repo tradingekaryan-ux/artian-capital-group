@@ -21,7 +21,7 @@ Dokumen: [`docs/PRD.md`](docs/PRD.md) · [`docs/IMPLEMENTATION_PLAN.md`](docs/IM
 - **Next.js 16** (App Router, Turbopack, React 19, Tailwind v4, ESLint 9)
 - **next-intl v4** — locale `/en` & `/id` (tanpa middleware, `createNextIntlPlugin`)
 - **Supabase** (Postgres + Auth + Storage) — RLS penuh
-- **Solana**: SPL Token + Metaplex umi (create token), **Raydium CPMM SDK v2** (pool & liquidity), **Jupiter** (swap), treasury platform menanggung seluruh gas SOL
+- **Solana**: SPL Token + Metaplex umi (create token), **Raydium CPMM SDK v2** (pool & liquidity), **Jupiter** (swap), gas on-chain dibayar dari **saldo SOL milik user** (wallet user = fee-payer; platform tidak mendanai gas)
 - **Worker**: `src/worker/run-jobs.ts` (queue job on-chain + refund), cron GitHub Actions tiap menit
 
 ## Setup lokal
@@ -72,4 +72,4 @@ Lihat [`.env.example`](.env.example). Catatan:
 
 ## Biaya infrastruktur
 
-**$0/bulan** — Supabase Free (2 proyek), Helius free tier, Jupiter/Raydium/DEXScreener API gratis, GitHub Actions (60.000 menit/bulan), PostHog free tier (opsional). Gas on-chain seluruhnya ditanggung treasury platform.
+**$0/bulan** — Supabase Free (2 proyek), Helius free tier, Jupiter/Raydium/DEXScreener API gratis, GitHub Actions (60.000 menit/bulan), PostHog free tier (opsional). Gas on-chain **dibayar user dari saldo SOL miliknya** (user-paid gas) — biaya gas platform $0, operator tidak perlu mengisi treasury.

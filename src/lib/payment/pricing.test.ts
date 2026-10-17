@@ -6,6 +6,8 @@ import {
   pricingValueSchema,
   uiToRaw,
   U64_MAX,
+  requiredSolFor,
+  SOL_REQUIREMENT,
 } from "./pricing";
 
 describe("pricing (pure)", () => {
@@ -73,5 +75,24 @@ describe("uiToRaw (konversi presisi-eksak)", () => {
     expect(() => uiToRaw("0.1234567", 6)).toThrow();
     expect(() => uiToRaw("20000000000", 9)).toThrow(); // 2e10 * 1e9 > u64
     expect(uiToRaw(String(U64_MAX), 0)).toBe(U64_MAX);
+  });
+});
+
+describe("requiredSolFor (preflight gas user)", () => {
+  it("setiap layanan punya kebutuhan SOL > 0", () => {
+    const services = Object.keys(SOL_REQUIREMENT);
+    expect(services.length).toBeGreaterThanOrEqual(5);
+    for (const s of services) {
+      expect(requiredSolFor(s as keyof typeof SOL_REQUIREMENT)).toBeGreaterThan(0);
+    }
+  });
+
+  it("biaya pembuatan pool jauh lebih besar dari layanan lain (CPMM fee 0.15 SOL)", () => {
+    expect(SOL_REQUIREMENT.create_pool).toBeGreaterThan(SOL_REQUIREMENT.create_token);
+    expect(SOL_REQUIREMENT.create_pool).toBeGreaterThan(0.3);
+  });
+
+  it("service tak dikenal fallback ke kebutuhan kecil", () => {
+    expect(requiredSolFor("bogus" as never)).toBe(0.01);
   });
 });

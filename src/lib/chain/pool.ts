@@ -23,8 +23,8 @@ import { clusterFor, type WalletKind } from "@/lib/config";
  * raydium.cpmm.createPool/addLiquidity/withdrawLiquidity).
  *
  * CATATAN FASE 4 (spike): verifikasi end-to-end di devnet sebelum mainnet —
- * khususnya feePayer treasury & pemilihan feeConfig. Alternatif yang
- * dibandingkan: Meteora DAMM v2 & Orca Whirlpools.
+ * khususnya feePayer = wallet user (gas dari saldo SOL user) & pemilihan
+ * feeConfig. Alternatif yang dibandingkan: Meteora DAMM v2 & Orca Whirlpools.
  */
 
 const COMPUTE_BUDGET = { units: 600_000, microLamports: 100_000 } as const;
@@ -88,13 +88,13 @@ export async function createCpmmPool(
   const mintB = await raydium.token.getTokenInfo(p.quoteMint);
 
   // Builder Raydium bermasalah dgn feePayer asing (akun user ter-mark readonly
-  // → PrivilegeEscalation). Pakai feePayer default = owner; user dibekali
-  // sedikit SOL oleh treasury (boros ≤0.001 SOL per pool).
+  // → PrivilegeEscalation). Pakai feePayer default = owner — gas pembuatan pool
+  // (protokol CPMM 0.15 SOL + rent) dibayar dari saldo SOL milik user sendiri.
   const userSol = await rpcRead((c) => c.getBalance(p.owner.publicKey), kind);
-  // CPMM creation fee protocol 0.15 SOL + rent akun (boros — hanya devnet/mainnet).
   if (userSol < 260_000_000) {
-    const { gasDrop } = await import("@/lib/chain/swap");
-    await gasDrop(p.owner.publicKey.toBase58(), 250_000_000, kind);
+    throw new Error(
+      "Saldo SOL tidak cukup untuk biaya pembuatan pool (butuh ±0,26 SOL). Isi SOL dulu, lalu coba lagi.",
+    );
   }
 
   const built = await raydium.cpmm.createPool({

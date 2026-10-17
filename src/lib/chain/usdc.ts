@@ -14,7 +14,11 @@ import { getConnection, rpcRead } from "@/lib/solana/connection";
 import { recoverExpiredSignature } from "@/lib/chain/confirm";
 import { usdcMintFor, USDC_DECIMALS, SECRETS, type WalletKind } from "@/lib/config";
 
-/** Kirim transfer USDC: fee payer = treasury, penandatangan = pemilik dana. */
+/**
+ * Kirim transfer USDC. Model gas: fee-payer = wallet user (dibebankan ke user);
+ * `feePayer` bisa sama dengan `from` (disederhanakan jadi satu signer).
+ * `from` = pemilik dana (user wallet, atau treasury untuk refund).
+ */
 export async function sendUsdcTransfer(params: {
   from: Keypair; // pemilik dana (user wallet atau treasury)
   toOwner: PublicKey;
@@ -55,7 +59,9 @@ export async function sendUsdcTransfer(params: {
   );
 
   try {
-    return await sendAndConfirmTransaction(conn, tx, [params.feePayer, params.from], {
+    const sameSigner = params.feePayer.publicKey.equals(params.from.publicKey);
+    const signers = sameSigner ? [params.feePayer] : [params.feePayer, params.from];
+    return await sendAndConfirmTransaction(conn, tx, signers, {
       commitment: "confirmed",
     });
   } catch (e) {
@@ -66,9 +72,11 @@ export async function sendUsdcTransfer(params: {
 }
 
 /**
- * Treasury platform. Untuk wallet demo memakai TREASURY_SECRET_KEY_DEMO bila
- * diset, selain itu fallback ke TREASURY_SECRET_KEY (keypair cluster-agnostic —
- * hanya perlu di-airdrop SOL devnet sekali).
+ * Treasury platform (penerima fee USDC; kunci dipakai untuk refund).
+ * TIDAK didanai operator — treasury tidak membayar gas (wallet user = fee-payer
+ * semua transaksi), jadi tidak perlu airdrop SOL ke treasury.
+ * Wallet demo memakai TREASURY_SECRET_KEY_DEMO bila diset, selain itu fallback
+ * ke TREASURY_SECRET_KEY.
  */
 export function getTreasury(kind: WalletKind = "mainnet"): Keypair {
   if (kind === "demo") {

@@ -15,7 +15,6 @@ import {
 } from "@metaplex-foundation/umi";
 import { createV1, TokenStandard } from "@metaplex-foundation/mpl-token-metadata";
 import { getConnection } from "@/lib/solana/connection";
-import { getTreasury } from "@/lib/chain/usdc";
 import type { WalletKind } from "@/lib/config";
 
 export interface CreateTokenParams {
@@ -38,56 +37,54 @@ export interface CreateTokenResult {
 
 /**
  * Buat token SPL lengkap dengan Metaplex metadata, dalam satu alur:
- *  1. createMint            — payer treasury, authority sementara treasury
- *  2. createV1 (Metaplex)   — metadata on-chain, update authority = wallet user
+ *  1. createMint            — payer & authority = wallet user
+ *  2. createV1 (Metaplex)   — metadata on-chain, payer & update authority = user
  *  3. ATA user + mintTo     — supply penuh masuk ke wallet user
- *  4. setAuthority (opsional) — revoke mint/freeze (ditandatangani user)
+ *  4. setAuthority (opsional) — revoke mint/freeze oleh user
  *
- * User tidak pernah membutuhkan SOL: semua fee & rent dibayar treasury.
+ * Model gas: SELURUH fee & rent dibayar dari saldo SOL milik user
+ * (wallet user = fee-payer) — platform tidak mendanai treasury.
+ * Preflight `requiredSolFor("create_token")` dijalankan sebelum order dibayar.
  */
 export async function createSplToken(
   params: CreateTokenParams,
   kind: WalletKind = "mainnet",
 ): Promise<CreateTokenResult> {
   const connection = getConnection(kind);
-  const treasury = getTreasury(kind);
+  const owner = params.owner;
   const signatures: string[] = [];
 
-  // 1) Mint account (Token Program)
+  // 1) Mint account (Token Program) — payer & authority = user
   const mintAddr = await createMint(
     connection,
-    treasury,
-    treasury.publicKey, // mint authority sementara (treasury) — dipindah/revoke setelah supply ter-mint
-    treasury.publicKey, // freeze authority sementara
+    owner,
+    owner.publicKey, // mint authority = user sejak awal (tanpa transfer)
+    owner.publicKey, // freeze authority = user
     params.decimals,
     params.mint,
   );
   const initSigs = await connection.getSignaturesForAddress(mintAddr, { limit: 2 });
   signatures.push(...initSigs.map((s) => s.signature).reverse());
 
-  // 2) Metadata (Metaplex Token Metadata, via umi)
+  // 2) Metadata (Metaplex Token Metadata, via umi) — identity = user (payer)
   const umi = createUmi(connection.rpcEndpoint, { commitment: "confirmed" });
-  umi.use(keypairIdentity(umi.eddsa.createKeypairFromSecretKey(treasury.secretKey)));
+  umi.use(keypairIdentity(umi.eddsa.createKeypairFromSecretKey(owner.secretKey)));
   const umiMint = createSignerFromKeypair(
     umi,
     umi.eddsa.createKeypairFromSecretKey(params.mint.secretKey),
   );
-  const umiUser = createSignerFromKeypair(
-    umi,
-    umi.eddsa.createKeypairFromSecretKey(params.owner.secretKey),
-  );
   const metaSig = await createV1(umi, {
     mint: umiMint,
-    // authority = mint authority di-chain (treasury, hasil langkah 1);
+    // authority = mint authority di-chain (= user, hasil langkah 1);
     // di Token Metadata wajib cocok dengan mint, kalau tidak → error 0xa.
     authority: umi.identity,
     payer: umi.identity,
-    updateAuthority: umiUser.publicKey,
+    updateAuthority: umi.identity.publicKey,
     name: params.name.slice(0, 32),
     symbol: params.symbol.slice(0, 10),
     uri: params.metadataUri,
-    // Tanpa creators: resolver default menandai authority (treasury) sbg
-    // creator verified — melanggar aturan "creator must sign" (error 0x36).
+    // Tanpa creators: resolver default menandai authority sbg creator
+    // verified — melanggar aturan "creator must sign" (error 0x36).
     creators: none(),
     sellerFeeBasisPoints: createAmount(0, "%", 2),
     tokenStandard: TokenStandard.Fungible,
@@ -95,55 +92,35 @@ export async function createSplToken(
   }).sendAndConfirm(umi, { confirm: { commitment: "confirmed" } });
   signatures.push(String(metaSig.signature));
 
-  // 3) ATA user + seluruh supply (mint authority masih treasury)
+  // 3) ATA user + seluruh supply (authority = user)
   const ata = await getOrCreateAssociatedTokenAccount(
     connection,
-    treasury,
+    owner,
     mintAddr,
-    params.owner.publicKey,
+    owner.publicKey,
   );
   const sigMintTo = await mintTo(
     connection,
-    treasury,
+    owner,
     mintAddr,
     ata.address, // seluruh supply masuk ke ATA user
-    treasury.publicKey, // authority sementara
+    owner.publicKey, // authority = user
     params.supplyRaw,
     [],
   );
   signatures.push(sigMintTo);
 
-  // 3b) Pindahkan mint authority dari treasury → user (sebelum revoke)
-  await setAuthority(
-    connection,
-    treasury,
-    mintAddr,
-    treasury.publicKey,
-    AuthorityType.MintTokens,
-    params.owner.publicKey,
-    [],
-  );
-  await setAuthority(
-    connection,
-    treasury,
-    mintAddr,
-    treasury.publicKey,
-    AuthorityType.FreezeAccount,
-    params.owner.publicKey,
-    [],
-  );
-
-  // 4) Revoke authorities sesuai pilihan user (ditandatangani user)
+  // 4) Revoke authorities sesuai pilihan user (user = authority saat ini)
   if (params.revokeMintAuthority) {
     signatures.push(
       await setAuthority(
         connection,
-        treasury,
+        owner,
         mintAddr,
-        params.owner.publicKey,
+        owner.publicKey,
         AuthorityType.MintTokens,
         null,
-        [params.owner],
+        [],
       ),
     );
   }
@@ -151,12 +128,12 @@ export async function createSplToken(
     signatures.push(
       await setAuthority(
         connection,
-        treasury,
+        owner,
         mintAddr,
-        params.owner.publicKey,
+        owner.publicKey,
         AuthorityType.FreezeAccount,
         null,
-        [params.owner],
+        [],
       ),
     );
   }

@@ -83,8 +83,8 @@ Satu website tempat user:
 - Halaman **Wallet** menampilkan: alamat public, saldo USDC, riwayat transaksi on-chain, tombol *Copy / Explorer*.
 - **Private key tidak pernah ditampilkan atau diekspor** di fase 1 (non-exportable).
 
-### F-B. Topup (Deposit USDC)
-- User mengirim USDC (mint `EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyBTv` di **jaringan Solana**) ke alamat wallet miliknya.
+### F-B. Topup (Deposit USDC & SOL)
+- User mengirim **USDC** (mint `EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyBTv` di **jaringan Solana**) ke alamat wallet miliknya untuk membayar layanan, dan **SOL** untuk gas on-chain (transaksi dibayar oleh wallet user sendiri).
 - Saldo terdeteksi otomatis (polling/indexer + konfirmasi) dan langsung terpakai untuk membayar layanan.
 - Tampil ringkasan: alamat deposit, QR alamat, riwayat deposit, status konfirmasi.
 - **Tanpa gateway pihak ketiga, tanpa fee deposit.**
@@ -105,7 +105,7 @@ Form satu halaman:
 | **Metadata immutable** | opsional |
 
 Hasil on-chain: mint account (Token Program), Metaplex Token Metadata (nama/logo/deskripsi/URI), ATA user + seluruh supply di-mint ke wallet user.
-- **Payer semua transaksi = treasury platform** (user tidak butuh SOL).
+- **Gas on-chain (fee & rent) dibayar dari saldo SOL milik user** — wallet user adalah fee-payer transaksinya sendiri; platform tidak perlu mengisi/menanggung gas (preflight cek saldo SOL sebelum order dibuat).
 - **Mint & freeze authority = wallet user** (user yang berwenang me-revoke nanti).
 - Metadata disimpan sebagai JSON + gambar di storage (Supabase Storage) → URI on-chain.
 - Setelah `confirmed`, **halaman profil token dibuat otomatis** (`/token/{mint}`).
@@ -131,7 +131,7 @@ Total supply token
 - **Tambah likuiditas**: nominal token + quote (USDC/SOL) mengikuti rasio pool saat ini; preview jumlah LP yang diterima.
 - **Kuras likuiditas (withdraw LP)**: masukkan % posisi → preview kedua aset yang ditarik → konfirmasi → aset kembali ke wallet user.
 - **Statistik pool** tampil di halaman token: TVL, harga, volume, fee terkumpul, share LP user.
-- Semua aksi LP **dibayar dari saldo USDC user**, gas ditanggung treasury.
+- Semua aksi LP **dibayar dari saldo USDC user**, gas dibayar dari saldo SOL user.
 
 ### F-F. Swap In-App (pendukung withdrawal)
 - Karena **withdrawal hanya menerima USDC**, user harus bisa mengubah SOL/token SPL miliknya menjadi USDC langsung di website.
@@ -155,7 +155,7 @@ Total supply token
 ### F-I. Admin Panel (minim)
 - Daftar order & status (manual retry/refund).
 - Konfigurasi harga layanan (mis. create token, buat LP, fee withdrawal, fee swap).
-- Monitoring treasury: saldo SOL (float gas) & USDC, riwayat pengeluaran.
+- Monitoring treasury: saldo USDC (penerima fee) & riwayat pengeluaran — treasury tidak menyimpan float gas SOL.
 - Moderasi komentar & user (suspend).
 - Log audit.
 
@@ -166,7 +166,7 @@ Tujuan: user bisa **belajar** membuat token & liquidity pool di jaringan uji seb
   - Deposit **manual**: user menyalin alamat wallet demo lalu meminta (faucet) SOL & USDC devnet dari situs eksternal — `faucet.solana.com` (SOL) dan `faucet.circle.com` (USDC, jaringan Solana Devnet) — dengan menempel alamat wallet sendiri. Tanpa deposit otomatis, tanpa airdrop in-app.
   - Layanan yang tersedia: **create token → create pool → add/remove liquidity** (harga sama dengan mainnet, dibayar dengan **USDC devnet**).
   - **Tanpa withdraw & tanpa swap** (Jupiter tidak mendukung devnet; WD/SOL tidak berharga di jaringan uji).
-  - Gas on-chain devnet (rent, Raydium creation fee) tetap ditanggung treasury devnet (butuh airdrop SOL devnet sekali ke kunci treasury).
+  - Gas on-chain devnet (fee, rent, Raydium creation fee) dibayar dari saldo SOL devnet milik wallet user sendiri — faucet SOL devnet sudah mencukupi; treasury devnet tidak butuh airdrop.
 - **Penandaan & isolasi data**: setiap row `orders`/`tokens`/`pools`/`wallet_events` membawa `wallet_id` + `kind` (`mainnet`|`demo`). Token/pool demo **disembunyikan** dari explore, sitemap, dan statistik publik — tetap bisa dibuka via link milik pemiliknya (badge DEMO + link explorer `?cluster=devnet`).
 
 ---
@@ -200,7 +200,7 @@ requested ──(OTP benar)──▶ processing ──(tx sukses)──▶ confi
 
 > Semua harga dikonfigurasi admin, disimpan di tabel `pricing_config`, dan ditampilkan sebelum user membayar.
 
-### 6.1 Komponen biaya nyata (on-chain, dibayar treasury, dibebankan ke user)
+### 6.1 Komponen biaya nyata (on-chain; gas dari saldo SOL user, fee USDC masuk treasury)
 | Komponen | Perkiraan biaya on-chain |
 |---|---|
 | Create token (mint + metadata + ATA + supply) | ≈ 0.010–0.020 SOL (rent 165-byte mint ≈ 0.0015 SOL, metadata ≈ 0.005–0.01 SOL, ATA ≈ 0.002 SOL, fee & priority kecil) |
@@ -216,7 +216,7 @@ requested ──(OTP benar)──▶ processing ──(tx sukses)──▶ confi
 | Buat liquidity pool | **10 USDC** + dana LP (dari saldo user) | biaya rent pool besar → ditanggung penuh user |
 | Tambah likuiditas | **1 USDC** | flat |
 | Kuras likuiditas | **Gratis** | gas sudah tercakup margin |
-| Swap in-app | **0.30%** dari nilai swap (min 0.05 USDC) | mencakup gas treasury + likuiditas route |
+| Swap in-app | **0.30%** dari nilai swap (min 0.05 USDC) | mencakup likuiditas route (gas swap dari SOL user) |
 | Withdrawal USDC | **0.50 USDC** flat | di atas biaya jaringan |
 | Topup | **Gratis** | |
 
@@ -227,8 +227,9 @@ buffer_gas default 15% (fluktuasi harga SOL & priority fee)
 ```
 
 ### 6.3 Operasional treasury
-- Treasury = hot wallet platform (terpisah dari wallet user) sebagai **fee payer** semua transaksi.
-- Float SOL treasury dijaga oleh **auto-swap USDC→SOL** (Jupiter) saat saldo SOL < ambang batas.
+- Treasury = hot wallet platform (terpisah dari wallet user): **penerima fee USDC** dan **sumber dana refund** — **bukan** fee-payer transaksi.
+- Treasury **tidak menyimpan float SOL** — semua gas dibayar wallet user dari saldo SOL-nya sendiri (operator platform tidak perlu mendanai gas; $0 biaya gas platform).
+- **Refund** ditandatangani treasury sebagai pengirim USDC, tetapi **gas refund dari saldo SOL wallet user**; job refund diretry lama (hingga 60×) agar user sempat mengisi SOL bila habis. Jika SOL user habis permanen, refund tertunda sampai user top-up (risiko langka, tercatat di §10).
 - Pendapatan platform (USDC di treasury) ditarik manual oleh admin via private key di environment (fase 1, operasi manual).
 
 ---
@@ -248,7 +249,7 @@ buffer_gas default 15% (fluktuasi harga SOL & priority fee)
 
 ### 7.2 Performa & Skala
 - Halaman publik dirender dinamis (SSR) dengan cache market data 15 detik; ISR `revalidate` dinonaktifkan pada implementasi saat ini (kompatibel dengan mode render Next 16 yang dipakai).
-- Snapshot harga tiap 1 menit + job siklis (treasury rebalance, index wallet) dijalankan worker GitHub Actions (cron per menit) — cron ini sekaligus menjadi heartbeat DB (menyentuh DB tiap menit, §10 R5).
+- Snapshot harga tiap 1 menit + job siklis (index wallet) dijalankan worker GitHub Actions (cron per menit) — cron ini sekaligus menjadi heartbeat DB (menyentuh DB tiap menit, §10 R5). Job `treasury_rebalance` dimatikan (treasury tidak butuh float gas).
 - RPC: Helius free (10 RPS) dengan fallback publik + exponential backoff.
 - Semua pekerjaan berat (build tx, kirim, konfirmasi) berjalan **asinkron** lewat job queue — request user tidak pernah menunggu konfirmasi on-chain.
 
@@ -303,7 +304,7 @@ audit_logs          — actor, action, target, payload, ip
 pricing_config      — key, value(jsonb), updated_by, updated_at
 jobs                — type(create_token|create_pool|add_liquidity|remove_liquidity|
                       withdraw|swap|index_wallet|price_snapshot|
-                      treasury_rebalance|refund),
+                      treasury_rebalance (dimatikan)|refund),
                       status(pending|running|done|failed), attempts, run_at, last_error
 ```
 
@@ -317,7 +318,7 @@ jobs                — type(create_token|create_pool|add_liquidity|remove_liqui
 | A2 | Nama brand sementara **Artian Capital Group** | Placeholder, mudah diganti |
 | A3 | Pair default pool = TOKEN/USDC | Disepakati; TOKEN/SOL jadi opsi |
 | A4 | Withdrawal **hanya USDC** (SOL/token wajib swap dulu) | Disepakati |
-| A5 | Gas ditanggung treasury, dibebankan ke user lewat harga USDC | Disepakati |
+| A5 | **User-paid gas**: wallet user = fee-payer semua transaksi (saldo SOL user); fee layanan (USDC) masuk treasury — platform tidak mendanai gas | Disepakati (menggantikan "gas ditanggung treasury") |
 | Q1 | Perlu export private key di kemudian hari? | Ditunda — fase lanjut, dengan KYC/keamanan tambahan |
 | Q2 | Perlu fiat on-ramp (mis. QRIS) untuk user tanpa USDC? | Fase lanjut, setelah tinjauan ToS gateway & risiko regulasi |
 
@@ -328,7 +329,7 @@ jobs                — type(create_token|create_pool|add_liquidity|remove_liqui
 | # | Risiko | Dampak | Mitigasi |
 |---|---|---|---|
 | R1 | Kebocoran master key / hot wallet | Kehilangan dana user | Enkripsi ketat, secret hanya di env, pisahkan treasury & key user, audit log, monitoring saldo, siapkan prosedur rotasi & pemindahan dana |
-| R2 | Jumlah SOL treasury (gas) habis | Order tertahan | Auto-swap USDC→SOL, alert ambang batas, retry queue |
+| R2 | Saldo SOL user habis saat gas dibutuhkan (termasuk untuk refund) | Order ditolak preflight (402) atau refund tertunda | Preflight `requiredSolFor()` sebelum order dibuat + pesan jelas di UI; refund diretry lama (60×); panduan deposit SOL di halaman Wallet |
 | R3 | Perubahan program DEX (Raydium) / SDK breaking | Fitur LP rusak | Pin versi SDK, adapter layer, spike pembanding (Meteora/Orca), uji di devnet |
 | R4 | Rate limit RPC/Jupiter/DexScreener | Data/loading gagal | Fallback provider, cache, backoff, snapshot internal |
 | R5 | Supabase free di-pause (7 hari sepi) | Site down | Cron heartbeat menulis DB ≥ 1×/jam; jalur upgrade ke Pro saat revenue |
@@ -366,7 +367,7 @@ Kode seluruh fase (F0–F6 + F-J) diimplementasikan; `lint + typecheck + test (2
 | F-A: wallet otomatis 1:1 dengan akun | ✅ Selesai | Dibuat via `ensureProfile`/`ensureWallet` di aplikasi (bukan trigger DB `handle_new_user`) |
 | F-A: lupa password | ❌ Dihapus (keputusan) | Tanpa Resend — reset password di luar scope fase 1 |
 | F-B: topup & saldo otomatis | ✅ Selesai | Baca saldo on-chain + konfirmasi tx → `wallet_events`; **QR deposit belum ada**; scan riwayat penuh membutuh Helius (tanpa itu keterbatasan RPC publik) |
-| F-C: create token end-to-end | ✅ Selesai | Payer treasury, mint/freeze authority → wallet user (revoke opsional), immutable opsional, metadata di Storage |
+| F-C: create token end-to-end | ✅ Selesai | Payer & mint/freeze authority = wallet user sejak awal (revoke opsional), immutable opsional, metadata di Storage |
 | F-D: halaman profil token | ✅ Selesai | `generateMetadata` + OG, chart, statistik, panel pool, komentar, watchlist |
 | F-D/§7.4: JSON-LD, `sitemap.xml`, `robots.txt` | ✅ Selesai | `robots.txt` (blok `/api/`, admin, verify), `sitemap.xml` (static ×2 locale + token live dari DB), JSON-LD `WebSite`+`SearchAction` di layout & `WebPage`+`Offer` di halaman token |
 | F-E: liquidity pool (Raydium CPMM) | ⚠️ Sebagian | Pair **USDC** berfungsi; **SOL sebagai quote belum tersedia di UI** (backend generik). Fee tier di UI masih default 0.25% (API menerima 1–100 bps). Spike pembanding Meteora/Orca (exit F4) tertunda |
