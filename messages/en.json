@@ -59,7 +59,9 @@
     "noAccount": "No account yet?",
     "register": "Register",
     "login": "Log in",
-    "walletNotice": "A Solana wallet will be created for you automatically — no seed phrase needed."
+    "walletNotice": "A Solana wallet will be created for you automatically — no seed phrase needed.",
+    "registerLimitNotice": "Registration is limited to 3 users per hour. If it fails, the limit has been reached — wait for the next hour and try again.",
+    "registerRateLimitError": "Registration limit reached (max 3 users per hour). Wait for the next hour and try again."
   },
   "wallet": {
     "title": "Your wallet",

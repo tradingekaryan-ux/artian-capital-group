@@ -59,7 +59,9 @@
     "noAccount": "Belum punya akun?",
     "register": "Daftar",
     "login": "Masuk",
-    "walletNotice": "Wallet Solana akan dibuat otomatis untukmu — tanpa seed phrase."
+    "walletNotice": "Wallet Solana akan dibuat otomatis untukmu — tanpa seed phrase.",
+    "registerLimitNotice": "Pendaftaran dibatasi maksimal 3 user per jam. Jika gagal, itu artinya batas tercapai — tunggu jam berikutnya lalu coba lagi.",
+    "registerRateLimitError": "Batas pendaftaran tercapai (maksimal 3 user per jam). Tunggu sampai jam berikutnya lalu coba lagi."
   },
   "wallet": {
     "title": "Dompet kamu",

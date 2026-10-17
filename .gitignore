@@ -35,6 +35,9 @@ yarn-error.log*
 .env*
 !.env.example
 
+# secrets inventory (never commit)
+/SECRETS.md
+
 # vercel
 .vercel
 

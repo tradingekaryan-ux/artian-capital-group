@@ -29,7 +29,12 @@ export function AuthForm({ mode }: { mode: Mode }) {
           password,
           options: { data: { username } },
         });
-        if (signUpError) throw new Error(signUpError.message);
+        if (signUpError) {
+          if (/rate limit/i.test(signUpError.message)) {
+            throw new Error(t("registerRateLimitError"));
+          }
+          throw new Error(signUpError.message);
+        }
         track("register");
         router.push("/verify");
       } else {
@@ -63,6 +68,11 @@ export function AuthForm({ mode }: { mode: Mode }) {
           <h1 className="text-3xl">
             {mode === "login" ? t("loginTitle") : t("registerTitle")}
           </h1>
+          {mode === "register" && (
+            <p className="mt-4 rounded-xl border-2 border-black bg-[#fef9c3] p-3 text-xs font-medium text-muted-ink">
+              {t("registerLimitNotice")}
+            </p>
+          )}
           <form onSubmit={submit} className="mt-6 flex flex-col gap-4">
           {mode === "register" && (
             <div>
