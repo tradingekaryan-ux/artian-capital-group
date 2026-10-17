@@ -3,6 +3,7 @@ import { getAssociatedTokenAddressSync } from "@solana/spl-token";
 import { supabaseAdmin } from "@/lib/db/client";
 import { generateWalletKeypair, keypairFromEncrypted } from "@/lib/solana/keypair";
 import { rpcRead } from "@/lib/solana/connection";
+import { ensureProfile } from "@/lib/profiles";
 import { USDC_MINT, LAMPORTS_PER_SOL } from "@/lib/config";
 import type { Keypair } from "@solana/web3.js";
 
@@ -26,6 +27,10 @@ export async function ensureWallet(userId: string): Promise<WalletRow> {
     .eq("user_id", userId)
     .single();
   if (existing) return existing as WalletRow;
+
+  // wallets.user_id FK → profiles: profile WAJIB ada dulu (user bisa langsung
+  // panggil API wallet sebelum pernah membuka dashboard).
+  await ensureProfile(userId);
 
   const kp = generateWalletKeypair();
   const { data, error } = await db

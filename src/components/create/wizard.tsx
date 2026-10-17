@@ -53,6 +53,9 @@ export function CreateTokenWizard({ priceUsdc }: Props) {
   const [orderStatus, setOrderStatus] = useState<string | null>(null);
   const [resultMint, setResultMint] = useState<string | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  // Idempotency: satu key per mount — klik ganda / retry jaringan tidak membuat 2 order.
+  // Diisi lazily di handler submit (bukan saat render — aturan purity React).
+  const idemRef = useRef("");
 
   const patch = (p: Partial<WizardState>) => setState((s) => ({ ...s, ...p }));
 
@@ -102,6 +105,12 @@ export function CreateTokenWizard({ priceUsdc }: Props) {
   }
 
   async function submit() {
+    if (!idemRef.current) {
+      idemRef.current =
+        typeof crypto !== "undefined" && crypto.randomUUID
+          ? crypto.randomUUID()
+          : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    }
     setBusy(true);
     setError(null);
     try {
@@ -110,6 +119,7 @@ export function CreateTokenWizard({ priceUsdc }: Props) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           service: "create_token",
+          idempotencyKey: idemRef.current,
           config: {
             ...state,
             website: state.website || undefined,

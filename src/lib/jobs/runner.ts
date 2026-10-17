@@ -18,11 +18,12 @@ import {
   completeJob,
   claimPendingJobs,
   failJob,
+  enqueue,
   type JobRow,
   type JobType,
 } from "@/lib/jobs/queue";
 import { fetchMarketSummary, saveSnapshot } from "@/lib/market";
-import { rawToUsdc } from "@/lib/payment/pricing";
+import { rawToUsdc, uiToRaw, withdrawFeeRaw } from "@/lib/payment/pricing";
 import { failOrder } from "@/lib/payment/orders";
 
 type Handler = (payload: Record<string, unknown>) => Promise<void>;
@@ -37,6 +38,21 @@ async function handleCreateToken(payload: Record<string, unknown>): Promise<void
   const orderId = String(payload.orderId);
   const { data: order } = await db.from("orders").select("*").eq("id", orderId).single();
   if (!order || order.status === "confirmed") return;
+
+  // Idempotensi: bila token utk order ini SUDAH dibuat (crash setelah insert
+  // tokens sebelum order confirmed), jangan buat token kedua.
+  const { data: existingToken } = await db
+    .from("tokens")
+    .select("mint, created_tx")
+    .eq("order_id", orderId)
+    .maybeSingle();
+  if (existingToken) {
+    await db
+      .from("orders")
+      .update({ status: "confirmed", tx_signature: existingToken.created_tx ?? null })
+      .eq("id", orderId);
+    return;
+  }
   await db.from("orders").update({ status: "processing" }).eq("id", orderId);
 
   const cfg = order.config as {
@@ -69,7 +85,7 @@ async function handleCreateToken(payload: Record<string, unknown>): Promise<void
   });
 
   const decimals = cfg.decimals ?? 9;
-  const supplyRaw = BigInt(Math.round(Number(cfg.supply) * 10 ** decimals));
+  const supplyRaw = uiToRaw(cfg.supply, decimals); // presisi eksak — tanpa Number
 
   const result = await createSplToken({
     mint,
@@ -126,6 +142,20 @@ async function handleCreatePool(payload: Record<string, unknown>): Promise<void>
   const orderId = String(payload.orderId);
   const { data: order } = await db.from("orders").select("*").eq("id", orderId).single();
   if (!order || order.status === "confirmed") return;
+
+  // Idempotensi: pool utk order ini SUDAH dibuat — jangan buat pool kedua di-chain.
+  const { data: existingPool } = await db
+    .from("pools")
+    .select("id, created_tx")
+    .eq("order_id", orderId)
+    .maybeSingle();
+  if (existingPool) {
+    await db
+      .from("orders")
+      .update({ status: "confirmed", tx_signature: existingPool.created_tx ?? null })
+      .eq("id", orderId);
+    return;
+  }
   await db.from("orders").update({ status: "processing" }).eq("id", orderId);
 
   const cfg = order.config as {
@@ -148,16 +178,15 @@ async function handleCreatePool(payload: Record<string, unknown>): Promise<void>
     owner,
     baseMint,
     quoteMint,
-    baseAmountRaw: BigInt(Math.round(Number(cfg.tokenAmount) * 10 ** decimals)),
-    quoteAmountRaw: BigInt(
-      Math.round(Number(cfg.quoteAmount) * 10 ** (quoteMint.toBase58() === USDC_MINT ? 6 : 9)),
-    ),
+    baseAmountRaw: uiToRaw(cfg.tokenAmount, decimals),
+    quoteAmountRaw: uiToRaw(cfg.quoteAmount, quoteMint.toBase58() === USDC_MINT ? 6 : 9),
     feeBps: cfg.feeBps ?? 25,
   });
 
   await db.from("pools").insert({
     user_id: order.user_id,
     token_id: cfg.tokenId,
+    order_id: orderId,
     dex: "raydium_cpmm",
     pool_id: result.poolId,
     quote_mint: quoteMint.toBase58(),
@@ -239,35 +268,48 @@ async function handleWithdraw(payload: Record<string, unknown>): Promise<void> {
   if (!w || w.status === "confirmed" || w.status === "failed") return;
   await db.from("withdrawals").update({ status: "processing" }).eq("id", withdrawalId);
 
-  try {
-    const owner = await getWalletKeypair(w.user_id);
-    const destination = new PublicKey(w.destination as string);
-    const sig = await sendUsdcTransfer({
+  const owner = await getWalletKeypair(w.user_id);
+  const destination = new PublicKey(w.destination as string);
+  const treasury = getTreasury();
+
+  // 1) Fee flat → treasury (DIKUMPULKAN — sebelumnya fee tidak pernah ditarik).
+  //    Idempotensi: fee_tx dicatat; retry melewati langkah ini bila sudah terkirim.
+  const feeRaw = await withdrawFeeRaw();
+  let feeTx: string | null = w.fee_tx ?? null;
+  if (feeRaw > 0n && !feeTx) {
+    feeTx = await sendUsdcTransfer({
       from: owner,
-      toOwner: destination,
-      amountRaw: BigInt(w.amount_raw as string),
-      feePayer: getTreasury(),
+      toOwner: treasury.publicKey,
+      amountRaw: feeRaw,
+      feePayer: treasury,
+      skipCreateDestAta: true, // ATA treasury pasti ada
     });
-    await db
-      .from("withdrawals")
-      .update({ status: "confirmed", tx_signature: sig })
-      .eq("id", withdrawalId);
-    await db.from("wallet_events").upsert(
-      {
-        user_id: w.user_id,
-        type: "withdrawal",
-        mint: USDC_MINT,
-        amount_raw: `-${w.amount_raw}`,
-        signature: sig,
-        meta: { destination: w.destination },
-      },
-      { onConflict: "user_id,signature,type,mint" },
-    );
-    await refreshBalance(w.user_id);
-  } catch (e) {
-    // Biarkan job retry; penandaan failed final dilakukan onPermanentFailure.
-    throw e;
+    await db.from("withdrawals").update({ fee_tx: feeTx }).eq("id", withdrawalId);
   }
+
+  // 2) Jumlah utama → tujuan
+  const sig = await sendUsdcTransfer({
+    from: owner,
+    toOwner: destination,
+    amountRaw: BigInt(w.amount_raw as string),
+    feePayer: treasury,
+  });
+  await db
+    .from("withdrawals")
+    .update({ status: "confirmed", tx_signature: sig })
+    .eq("id", withdrawalId);
+  await db.from("wallet_events").upsert(
+    {
+      user_id: w.user_id,
+      type: "withdrawal",
+      mint: USDC_MINT,
+      amount_raw: `-${w.amount_raw}`,
+      signature: sig,
+      meta: { destination: w.destination, feeTx },
+    },
+    { onConflict: "user_id,signature,type,mint" },
+  );
+  await refreshBalance(w.user_id);
 }
 
 /* ───────────────── swap ───────────────── */
@@ -325,7 +367,9 @@ async function handleRefund(payload: Record<string, unknown>): Promise<void> {
   const db = supabaseAdmin();
   const orderId = String(payload.orderId);
   const { data: order } = await db.from("orders").select("*").eq("id", orderId).single();
-  if (!order || order.status === "refunded") return;
+  // Guard ketat: refund HANYA untuk order yang benar-benar gagal —
+  // jangan refund order confirmed (user sudah terima barang) / sudah refunded.
+  if (!order || order.status === "confirmed" || order.status === "refunded") return;
   if (!order.payment_signature) {
     // Tidak ada pembayaran → tidak ada yang perlu direfund.
     await db.from("orders").update({ status: "failed", error: order.error ?? "job gagal" }).eq("id", orderId);
@@ -486,7 +530,24 @@ export async function runPendingJobs(limit = 5): Promise<{ done: number; failed:
       if (permanent) await onPermanentFailure(job, msg);
     }
   }
+  // Pastikan job siklis selalu punya antrean berikutnya (production cron via
+  // /api/cron/run-jobs memanggil fungsi ini — tanpa ini snapshot berhenti).
+  await maybeScheduleCyclic();
   return { done, failed };
+}
+
+/** Jadwalkan job berkala (idempoten: hanya bila tidak ada job serupa pending). */
+export async function maybeScheduleCyclic(): Promise<void> {
+  const db = supabaseAdmin();
+  for (const type of ["price_snapshot", "treasury_rebalance"] as const) {
+    const { data } = await db
+      .from("jobs")
+      .select("id")
+      .eq("type", type)
+      .in("status", ["pending", "running"])
+      .limit(1);
+    if (!data?.length) await enqueue(type, {});
+  }
 }
 
 /** Job habis retry → tandai order/withdrawal gagal + refund otomatis bila perlu. */

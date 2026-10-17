@@ -13,6 +13,7 @@ export function WithdrawCard({ feeUsdc }: Props) {
   const [amount, setAmount] = useState("");
   const [dest, setDest] = useState("");
   const [withdrawalId, setWithdrawalId] = useState<number | null>(null);
+  const [devCode, setDevCode] = useState<string | null>(null);
   const [otp, setOtp] = useState("");
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -32,6 +33,7 @@ export function WithdrawCard({ feeUsdc }: Props) {
       const json = await res.json();
       if (!res.ok) throw new Error(json.error ?? "Error");
       setWithdrawalId(json.id);
+      setDevCode(json.devCode ?? null);
       setMessage(t("otpSent"));
       track("withdraw_requested");
     } catch (err) {
@@ -109,6 +111,11 @@ export function WithdrawCard({ feeUsdc }: Props) {
       ) : (
         <form onSubmit={verifyOtp} className="flex flex-col gap-3">
           <p className="text-sm text-muted-ink">{t("otpVerify")}</p>
+          {devCode && (
+            <p className="rounded-xl border-2 border-black bg-[#d8ff3e] p-2 text-center text-sm font-bold mono">
+              Kode (dev): {devCode}
+            </p>
+          )}
           <input
             className="input mono text-center text-lg tracking-[0.4em]"
             inputMode="numeric"

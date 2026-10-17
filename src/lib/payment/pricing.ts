@@ -55,6 +55,27 @@ export function usdcToRaw(usdc: number): bigint {
   return BigInt(Math.round(usdc * 10 ** USDC_DECIMALS));
 }
 
+/** u64 max — batas amount SPL token on-chain. */
+export const U64_MAX = 2n ** 64n - 1n;
+
+/**
+ * Konversi amount desimal (string/UI) → raw base-unit TANPA kehilangan
+ * presisi Number (Math.round(n * 10**d) salah utk > 2^53).
+ * Melempar bila bukan angka valid atau melebihi u64.
+ */
+export function uiToRaw(amount: string | number, decimals: number): bigint {
+  const s = String(amount).trim();
+  if (!/^\d+(\.\d+)?$/.test(s)) throw new Error(`amount tidak valid: ${s}`);
+  const [intPart, fracPart = ""] = s.split(".");
+  if (fracPart.length > decimals) {
+    throw new Error(`amount melebihi ${decimals} desimal`);
+  }
+  const frac = fracPart.padEnd(decimals, "0");
+  const raw = BigInt(intPart + frac);
+  if (raw > U64_MAX) throw new Error("amount melebihi batas u64");
+  return raw;
+}
+
 export function rawToUsdc(raw: bigint | number): number {
   return Number(raw) / 10 ** USDC_DECIMALS;
 }

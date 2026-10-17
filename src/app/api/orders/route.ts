@@ -2,49 +2,79 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { requireUser } from "@/lib/db/client";
 import { createAndPayOrder, OrderError } from "@/lib/payment/orders";
+import { uiToRaw } from "@/lib/payment/pricing";
 import { rateLimit, clientIp } from "@/lib/security/ratelimit";
 import { audit } from "@/lib/security/audit";
 import { LIMITS } from "@/lib/config";
 
-const createTokenSchema = z.object({
-  service: z.literal("create_token"),
-  config: z.object({
-    name: z.string().min(2).max(50),
-    symbol: z
-      .string()
-      .min(2)
-      .max(10)
-      .regex(/^[A-Z0-9]+$/, "symbol huruf besar/angka saja"),
-    decimals: z.number().int().min(0).max(9),
-    supply: z.string().refine((v) => Number(v) > 0 && Number(v) <= 1e18, "supply tidak valid"),
-    logoBase64: z
-      .string()
-      .refine((v) => v.startsWith("data:image/"), "logo harus berupa data URL gambar")
-      .refine((v) => v.length <= 700_000, "logo terlalu besar (maks ~500KB)"),
-    description: z.string().max(500).optional(),
-    website: z.string().url().max(200).optional().or(z.literal("")),
-    twitter: z.string().max(200).optional().or(z.literal("")),
-    telegram: z.string().max(200).optional().or(z.literal("")),
-    discord: z.string().max(200).optional().or(z.literal("")),
-    revokeMint: z.boolean().default(true),
-    revokeFreeze: z.boolean().default(true),
-    immutable: z.boolean().default(false),
-  }),
-  idempotencyKey: z.string().max(100).optional(),
-});
+/** Amount desimal-positif (string) — divalidasi presisi + batas u64 oleh uiToRaw. */
+const amountString = z.string().regex(/^\d+(\.\d+)?$/, "jumlah tidak valid");
 
-const createPoolSchema = z.object({
-  service: z.literal("create_pool"),
-  config: z.object({
-    tokenId: z.string().uuid(),
-    lpPercentage: z.number().min(1).max(100),
-    tokenAmount: z.string().refine((v) => Number(v) > 0, "tokenAmount tidak valid"),
-    quoteAmount: z.string().refine((v) => Number(v) > 0, "quoteAmount tidak valid"),
-    quoteMint: z.string().optional(),
-    feeBps: z.number().int().min(1).max(100).optional(),
-  }),
-  idempotencyKey: z.string().max(100).optional(),
-});
+const createTokenSchema = z
+  .object({
+    service: z.literal("create_token"),
+    config: z.object({
+      name: z.string().min(2).max(50),
+      symbol: z
+        .string()
+        .min(2)
+        .max(10)
+        .regex(/^[A-Z0-9]+$/, "symbol huruf besar/angka saja"),
+      decimals: z.number().int().min(0).max(9),
+      supply: amountString,
+      logoBase64: z
+        .string()
+        .refine((v) => v.startsWith("data:image/"), "logo harus berupa data URL gambar")
+        .refine((v) => v.length <= 700_000, "logo terlalu besar (maks ~500KB)"),
+      description: z.string().max(500).optional(),
+      website: z.string().url().max(200).optional().or(z.literal("")),
+      twitter: z.string().max(200).optional().or(z.literal("")),
+      telegram: z.string().max(200).optional().or(z.literal("")),
+      discord: z.string().max(200).optional().or(z.literal("")),
+      revokeMint: z.boolean().default(true),
+      revokeFreeze: z.boolean().default(true),
+      immutable: z.boolean().default(false),
+    }),
+    idempotencyKey: z.string().max(100).optional(),
+  })
+  .superRefine((data, ctx) => {
+    try {
+      const raw = uiToRaw(data.config.supply, data.config.decimals);
+      if (raw <= 0n) throw new Error("supply harus > 0");
+    } catch (e) {
+      ctx.addIssue({
+        code: "custom",
+        message: e instanceof Error ? e.message : "supply tidak valid",
+        path: ["config", "supply"],
+      });
+    }
+  });
+
+const createPoolSchema = z
+  .object({
+    service: z.literal("create_pool"),
+    config: z.object({
+      tokenId: z.string().uuid(),
+      lpPercentage: z.number().min(1).max(100),
+      tokenAmount: amountString,
+      quoteAmount: amountString,
+      quoteMint: z.string().optional(),
+      feeBps: z.number().int().min(1).max(100).optional(),
+    }),
+    idempotencyKey: z.string().max(100).optional(),
+  })
+  .superRefine((data, ctx) => {
+    try {
+      if (uiToRaw(data.config.tokenAmount, 9) <= 0n) throw new Error("tokenAmount harus > 0");
+      if (uiToRaw(data.config.quoteAmount, 9) <= 0n) throw new Error("quoteAmount harus > 0");
+    } catch (e) {
+      ctx.addIssue({
+        code: "custom",
+        message: e instanceof Error ? e.message : "jumlah tidak valid",
+        path: ["config", "tokenAmount"],
+      });
+    }
+  });
 
 const addLiquiditySchema = z.object({
   service: z.literal("add_liquidity"),

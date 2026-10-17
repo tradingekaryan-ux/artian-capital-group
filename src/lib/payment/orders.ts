@@ -66,7 +66,18 @@ export async function createAndPayOrder(input: CreateOrderInput) {
     })
     .select("*")
     .single();
-  if (insertError) throw insertError;
+  if (insertError) {
+    // Race idempotencyKey: request kedua kena unique-violation → kembalikan order existing.
+    if (insertError.code === "23505" && input.idempotencyKey) {
+      const { data: existing } = await db
+        .from("orders")
+        .select("*")
+        .eq("idempotency_key", input.idempotencyKey)
+        .maybeSingle();
+      if (existing) return { order: existing, reused: true as const };
+    }
+    throw insertError;
+  }
 
   let paymentSignature: string | null = null;
   if (payUpfront) {
@@ -126,9 +137,22 @@ export class OrderError extends Error {
   }
 }
 
-/** Tandai order gagal setelah job gagal permanen + refund otomatis. */
+/**
+ * Tandai order gagal setelah job gagal permanen + refund otomatis bila perlu.
+ * Anti-loop: refund hanya di sekali — bila status sudah failed/refunded atau
+ * tidak ada pembayaran, tidak ada job refund baru.
+ */
 export async function failOrder(orderId: string, reason: string): Promise<void> {
   const db = supabaseAdmin();
+  const { data: current } = await db
+    .from("orders")
+    .select("status, payment_signature")
+    .eq("id", orderId)
+    .maybeSingle();
+  if (!current) return;
+  if (current.status === "failed" || current.status === "refunded") return;
   await db.from("orders").update({ status: "failed", error: reason }).eq("id", orderId);
-  await enqueue("refund", { orderId });
+  if (current.payment_signature) {
+    await enqueue("refund", { orderId });
+  }
 }

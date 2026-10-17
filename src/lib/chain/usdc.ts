@@ -1,53 +1,18 @@
 import {
   Keypair,
   PublicKey,
-  TransactionInstruction,
   sendAndConfirmTransaction,
   Transaction,
 } from "@solana/web3.js";
 import {
-  TOKEN_PROGRAM_ID,
-  createAssociatedTokenAccountInstruction,
   getAssociatedTokenAddressSync,
+  createAssociatedTokenAccountInstruction,
   createTransferCheckedInstruction,
 } from "@solana/spl-token";
 import bs58 from "bs58";
-import { getConnection } from "@/lib/solana/connection";
+import { getConnection, rpcRead } from "@/lib/solana/connection";
 import { recoverExpiredSignature } from "@/lib/chain/confirm";
 import { USDC_MINT, USDC_DECIMALS } from "@/lib/config";
-
-/**
- * Instruksi transfer USDC dengan ATA tujuan dibuat bila belum ada
- * (payer pembuat ATA = `ataPayer`, biasanya treasury).
- */
-export function buildUsdcTransferIx(params: {
-  fromOwner: PublicKey;
-  toOwner: PublicKey;
-  amountRaw: bigint;
-  ataPayer: PublicKey;
-}): TransactionInstruction[] {
-  const mint = new PublicKey(USDC_MINT);
-  const source = getAssociatedTokenAddressSync(mint, params.fromOwner);
-  const dest = getAssociatedTokenAddressSync(mint, params.toOwner);
-  const ixs: TransactionInstruction[] = [];
-  if (!params.fromOwner.equals(params.toOwner)) {
-    // ATA tujuan dibuat oleh payer (treasury) bila belum ada — cek di caller
-    ixs.push(
-      createAssociatedTokenAccountInstruction(params.ataPayer, dest, params.toOwner, mint),
-    );
-  }
-  ixs.push(
-    createTransferCheckedInstruction(
-      source,
-      mint,
-      dest,
-      params.fromOwner,
-      params.amountRaw,
-      USDC_DECIMALS,
-    ),
-  );
-  return ixs;
-}
 
 /** Kirim transfer USDC: fee payer = treasury, penandatangan = pemilik dana. */
 export async function sendUsdcTransfer(params: {
@@ -63,7 +28,8 @@ export async function sendUsdcTransfer(params: {
   const tx = new Transaction();
 
   if (!params.skipCreateDestAta) {
-    const info = await conn.getAccountInfo(destAta);
+    // rpcRead: cek ATA tahan-gangguan RPC (failover ke publik cluster)
+    const info = await rpcRead((c) => c.getAccountInfo(destAta));
     if (!info) {
       tx.add(
         createAssociatedTokenAccountInstruction(
@@ -106,5 +72,3 @@ export function getTreasury(): Keypair {
 export function usdcAtaOf(owner: PublicKey): PublicKey {
   return getAssociatedTokenAddressSync(new PublicKey(USDC_MINT), owner);
 }
-
-export { TOKEN_PROGRAM_ID };

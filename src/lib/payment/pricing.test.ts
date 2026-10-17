@@ -1,5 +1,12 @@
 import { describe, it, expect } from "vitest";
-import { usdcToRaw, swapFeeRaw, rawToUsdc, pricingValueSchema } from "./pricing";
+import {
+  usdcToRaw,
+  swapFeeRaw,
+  rawToUsdc,
+  pricingValueSchema,
+  uiToRaw,
+  U64_MAX,
+} from "./pricing";
 
 describe("pricing (pure)", () => {
   it("usdcToRaw mengonversi 6 desimal", () => {
@@ -43,5 +50,28 @@ describe("pricingValueSchema (validasi PATCH admin)", () => {
     // JSON.parse membuat __proto__ jadi own-property biasa (bukan prototype setter)
     expect(pricingValueSchema.safeParse(JSON.parse('{"__proto__":1,"flat_usdc":1}')).success).toBe(false);
     expect(pricingValueSchema.safeParse({ evil: 1, flat_usdc: 1 }).success).toBe(false);
+  });
+});
+
+describe("uiToRaw (konversi presisi-eksak)", () => {
+  it("mengonversi benar tanpa kehilangan presisi Number", () => {
+    expect(uiToRaw("1", 9)).toBe(1_000_000_000n);
+    expect(uiToRaw("0.5", 6)).toBe(500_000n);
+    expect(uiToRaw("1000000000", 9)).toBe(1_000_000_000_000_000_000n);
+    // kasus yang SALAH bila pakai Number: 9007199254740993 (2^53+1)
+    expect(uiToRaw("9007199254740993", 0)).toBe(9007199254740993n);
+  });
+
+  it("menolak format tidak valid", () => {
+    expect(() => uiToRaw("abc", 9)).toThrow();
+    expect(() => uiToRaw("-5", 9)).toThrow();
+    expect(() => uiToRaw("1.2.3", 9)).toThrow();
+    expect(() => uiToRaw("", 9)).toThrow();
+  });
+
+  it("menolak melebihi desimal / u64", () => {
+    expect(() => uiToRaw("0.1234567", 6)).toThrow();
+    expect(() => uiToRaw("20000000000", 9)).toThrow(); // 2e10 * 1e9 > u64
+    expect(uiToRaw(String(U64_MAX), 0)).toBe(U64_MAX);
   });
 });

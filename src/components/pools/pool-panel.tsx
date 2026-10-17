@@ -19,6 +19,13 @@ interface Props {
   addLiquidityFeeUsdc: number;
 }
 
+/** Idempotency-key acak (per form) — cegah order ganda akibat klik/ retry. */
+function newIdemKey(): string {
+  return typeof crypto !== "undefined" && crypto.randomUUID
+    ? crypto.randomUUID()
+    : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
+
 export function PoolPanel(props: Props) {
   if (!props.isOwner) return null;
   return props.hasPool ? <LiquidityForms {...props} /> : <CreatePoolForm {...props} />;
@@ -41,6 +48,7 @@ function CreatePoolForm({
   const [status, setStatus] = useState<string | null>(null);
   const [orderId, setOrderId] = useState<string | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const idemRef = useRef(""); // diisi lazily di submit (purity-safe)
 
   useEffect(() => () => void (pollRef.current && clearInterval(pollRef.current)), []);
 
@@ -49,6 +57,7 @@ function CreatePoolForm({
   const initialPrice = Number(quoteAmount) > 0 ? Number(quoteAmount) / tokenAmount : 0;
 
   async function submit() {
+    if (!idemRef.current) idemRef.current = newIdemKey();
     setBusy(true);
     setError(null);
     try {
@@ -57,6 +66,7 @@ function CreatePoolForm({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           service: "create_pool",
+          idempotencyKey: idemRef.current,
           config: {
             tokenId,
             lpPercentage: lpPct,
@@ -173,10 +183,12 @@ function LiquidityForms({ poolId, symbol, decimals, addLiquidityFeeUsdc, poolAdd
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const idemRef = useRef(""); // diisi lazily di submit (purity-safe)
 
   if (!poolId) return null;
 
   async function submit() {
+    if (!idemRef.current) idemRef.current = newIdemKey();
     setBusy(true);
     setError(null);
     setMessage(null);
@@ -196,7 +208,7 @@ function LiquidityForms({ poolId, symbol, decimals, addLiquidityFeeUsdc, poolAdd
       const res = await fetch("/api/orders", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ service, config }),
+        body: JSON.stringify({ service, config, idempotencyKey: idemRef.current }),
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error ?? "Error");

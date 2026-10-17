@@ -73,10 +73,13 @@ export function AuthForm({ mode }: { mode: Mode }) {
                 id="username"
                 className="input"
                 value={username}
-                onChange={(e) => setUsername(e.target.value)}
+                onChange={(e) =>
+                  setUsername(e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, "").slice(0, 24))
+                }
                 required
                 minLength={3}
-                maxLength={32}
+                maxLength={24}
+                pattern="[a-z0-9_]{3,24}"
                 autoComplete="username"
               />
             </div>

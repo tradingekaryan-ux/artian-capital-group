@@ -7,13 +7,21 @@ import { track } from "@/lib/analytics";
 export function SwapCard({ feePercent }: { feePercent: number }) {
   const t = useTranslations("wallet");
   const [asset, setAsset] = useState("SOL");
+  const [mint, setMint] = useState("");
   const [amount, setAmount] = useState("");
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
+  const assetValue = asset === "TOKEN" ? mint.trim() : asset;
+  const assetValid = asset === "TOKEN" ? mint.trim().length >= 32 : true;
+
   async function submit(e: React.FormEvent) {
     e.preventDefault();
+    if (!assetValid) {
+      setError("Masukkan alamat mint token (32-64 karakter).");
+      return;
+    }
     setBusy(true);
     setError(null);
     setMessage(null);
@@ -21,7 +29,7 @@ export function SwapCard({ feePercent }: { feePercent: number }) {
       const res = await fetch("/api/wallet/swap", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ asset, amount: Number(amount) }),
+        body: JSON.stringify({ asset: assetValue, amount: Number(amount) }),
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error ?? "Error");
@@ -55,6 +63,23 @@ export function SwapCard({ feePercent }: { feePercent: number }) {
             <option value="TOKEN">Token (SPL)</option>
           </select>
         </div>
+        {asset === "TOKEN" && (
+          <div className="sm:col-span-3">
+            <label className="label" htmlFor="s-mint">
+              Token mint address
+            </label>
+            <input
+              id="s-mint"
+              className="input mono text-xs"
+              placeholder="Alamat mint token milikmu…"
+              value={mint}
+              onChange={(e) => setMint(e.target.value.trim())}
+              minLength={32}
+              maxLength={64}
+              required
+            />
+          </div>
+        )}
         <div>
           <label className="label" htmlFor="s-amount">
             {t("swapAmount")}
@@ -70,7 +95,7 @@ export function SwapCard({ feePercent }: { feePercent: number }) {
           />
         </div>
         <div className="flex items-end">
-          <button className="btn btn-primary w-full" disabled={busy}>
+          <button className="btn btn-primary w-full" disabled={busy || !assetValid}>
             {busy ? "…" : t("swapCta")}
           </button>
         </div>

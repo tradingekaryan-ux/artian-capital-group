@@ -1,4 +1,4 @@
-import { randomOtp, sha256Hex } from "@/lib/security/crypto";
+import { randomOtp, sha256Hex, timingSafeEqualStr } from "@/lib/security/crypto";
 import { SECRETS } from "@/lib/config";
 import { supabaseAdmin } from "@/lib/db/client";
 
@@ -6,7 +6,8 @@ const TTL_MINUTES = 10;
 
 /**
  * Buat & kirim OTP 6 digit untuk withdrawal (disimpan di row withdrawals).
- * Tanpa RESEND_API_KEY, kode hanya muncul di log server (mode dev).
+ * Tanpa RESEND_API_KEY: kode dikembalikan sebagai devCode (mode devnet MVP).
+ * Kegagalan kirim email TIDAK menggagalkan pembuatan OTP (dicatat saja).
  */
 export async function createWithdrawOtp(
   withdrawalId: string,
@@ -25,23 +26,27 @@ export async function createWithdrawOtp(
   if (error) throw error;
 
   if (SECRETS.resendApiKey) {
-    await fetch("https://api.resend.com/emails", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${SECRETS.resendApiKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        from: "Artian <onboarding@resend.dev>",
-        to: [email],
-        subject: "Kode konfirmasi withdrawal — Artian",
-        text: `Kode konfirmasi withdrawal Anda: ${code} (berlaku ${TTL_MINUTES} menit).`,
-      }),
-    });
-  } else if (process.env.NODE_ENV !== "production") {
-    console.warn(`[dev] OTP withdrawal untuk ${email}: ${code}`);
+    try {
+      await fetch("https://api.resend.com/emails", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${SECRETS.resendApiKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          from: "Artian <onboarding@resend.dev>",
+          to: [email],
+          subject: "Kode konfirmasi withdrawal — Artian",
+          text: `Kode konfirmasi withdrawal Anda: ${code} (berlaku ${TTL_MINUTES} menit).`,
+        }),
+      });
+    } catch (e) {
+      console.error("[otp] kirim email gagal:", e);
+    }
   }
-  return { devCode: process.env.NODE_ENV !== "production" ? code : undefined };
+  // Devnet MVP: tanpa Resend, kode dibagikan langsung ke UI agar alur tetap jalan.
+  const devCode = SECRETS.resendApiKey ? undefined : code;
+  return { devCode };
 }
 
 export async function verifyWithdrawOtp(
@@ -57,5 +62,5 @@ export async function verifyWithdrawOtp(
   if (!data || data.user_id !== userId || data.status !== "pending") return false;
   if (!data.otp_hash || !data.otp_expires_at) return false;
   if (new Date(data.otp_expires_at).getTime() < Date.now()) return false;
-  return data.otp_hash === sha256Hex(code + userId);
+  return timingSafeEqualStr(data.otp_hash, sha256Hex(code + userId));
 }

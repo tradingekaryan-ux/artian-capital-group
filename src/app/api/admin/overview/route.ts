@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/admin";
 import { supabaseAdmin } from "@/lib/db/client";
 import { getPricing } from "@/lib/payment/pricing";
-import { getConnection } from "@/lib/solana/connection";
+import { rpcRead } from "@/lib/solana/connection";
 import { getTreasury } from "@/lib/chain/usdc";
 import { LAMPORTS_PER_SOL } from "@/lib/config";
 
@@ -38,12 +38,12 @@ export async function GET() {
       const [{ PublicKey }] = await Promise.all([import("@solana/web3.js")]);
       const { USDC_MINT } = await import("@/lib/config");
       const t = getTreasury();
-      const conn = getConnection();
       const usdcMint = new PublicKey(USDC_MINT);
       const { getAssociatedTokenAddressSync } = await import("@solana/spl-token");
+      const ata = getAssociatedTokenAddressSync(usdcMint, t.publicKey);
       const [solBal, usdcBal] = await Promise.all([
-        conn.getBalance(t.publicKey),
-        conn.getTokenAccountBalance(getAssociatedTokenAddressSync(usdcMint, t.publicKey)).catch(() => null),
+        rpcRead((c) => c.getBalance(t.publicKey)),
+        rpcRead((c) => c.getTokenAccountBalance(ata)).catch(() => null),
       ]);
       treasury = {
         sol: solBal / LAMPORTS_PER_SOL,
