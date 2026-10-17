@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { PublicKey } from "@solana/web3.js";
 import { requireActiveUser } from "@/lib/db/client";
 import { createAndPayOrder, OrderError } from "@/lib/payment/orders";
 import { uiToRaw } from "@/lib/payment/pricing";
@@ -102,11 +103,24 @@ const removeLiquiditySchema = z.object({
   idempotencyKey: z.string().max(100).optional(),
 });
 
+/** Burn Token / Burn & Earn — pemilik membakar token miliknya sendiri. */
+const burnSchema = z.object({
+  service: z.literal("burn"),
+  config: z.object({
+    mint: z.string().min(32).max(64),
+    amount: amountString,
+    mode: z.enum(["burn", "burn_earn"]).default("burn"),
+  }),
+  kind: kindField,
+  idempotencyKey: z.string().max(100).optional(),
+});
+
 const bodySchema = z.discriminatedUnion("service", [
   createTokenSchema,
   createPoolSchema,
   addLiquiditySchema,
   removeLiquiditySchema,
+  burnSchema,
 ]);
 
 export async function POST(req: Request) {
@@ -141,6 +155,15 @@ export async function POST(req: Request) {
   const authError = await authorizeConfig(user.id, parsed.data);
   if (authError) return NextResponse.json({ error: authError }, { status: 403 });
 
+  // Preflight burn: wallet aktif mainnet + saldo token cukup (402 bersih).
+  if (parsed.data.service === "burn") {
+    const burnCheck = await preflightBurn(user.id, parsed.data);
+    if ("error" in burnCheck) {
+      return NextResponse.json({ error: burnCheck.error, code: burnCheck.code }, { status: burnCheck.status });
+    }
+    Object.assign(parsed.data.config, { amountRaw: burnCheck.amountRaw, decimals: burnCheck.decimals });
+  }
+
   try {
     const { order, reused } = await createAndPayOrder({
       userId: user.id,
@@ -149,6 +172,10 @@ export async function POST(req: Request) {
       idempotencyKey: parsed.data.idempotencyKey,
       ip,
       kind: parsed.data.kind as WalletKind,
+      pricingKey:
+        parsed.data.service === "burn" && parsed.data.config.mode === "burn_earn"
+          ? "burn_earn"
+          : undefined,
     });
     return NextResponse.json({ order, reused });
   } catch (e) {
@@ -205,4 +232,79 @@ async function authorizeConfig(
     }
   }
   return null;
+}
+
+type BurnPreflight =
+  | { error: string; code?: string; status: number }
+  | { amountRaw: string; decimals: number };
+
+/**
+ * Preflight Burn: hanya mainnet; pastikan wallet aktif memegang token
+ * dan jumlahnya cukup sebelum order dibuat (402 bersih, tanpa row order).
+ */
+async function preflightBurn(
+  userId: string,
+  data: z.infer<typeof burnSchema>,
+): Promise<BurnPreflight> {
+  try {
+    const { getActiveWallet } = await import("@/lib/solana/wallet");
+    const wallet = await getActiveWallet(userId);
+    if (wallet.kind !== "mainnet") {
+      return {
+        error: "Burn hanya tersedia di wallet mainnet — pindah ke wallet live dulu.",
+        status: 403,
+      };
+    }
+
+    let mintPk: InstanceType<typeof PublicKey>;
+    try {
+      mintPk = new PublicKey(data.config.mint);
+    } catch {
+      return { error: "Alamat mint tidak valid", status: 400 };
+    }
+
+    const { getAssociatedTokenAddressSync, TOKEN_2022_PROGRAM_ID } = await import("@solana/spl-token");
+    const { rpcRead } = await import("@/lib/solana/connection");
+    const owner = new PublicKey(wallet.public_key);
+
+    // Cek saldo ATA — coba SPL Token lalu Token-2022 (token yang dipegang user).
+    const candidates = [
+      getAssociatedTokenAddressSync(mintPk, owner),
+      getAssociatedTokenAddressSync(mintPk, owner, false, undefined, TOKEN_2022_PROGRAM_ID),
+    ];
+    let amountRaw = 0n;
+    let decimals = 0;
+    for (const ata of candidates) {
+      try {
+        const bal = await rpcRead((c) => c.getTokenAccountBalance(ata, "confirmed"));
+        decimals = bal.value.decimals;
+        amountRaw = BigInt(bal.value.amount);
+        break;
+      } catch {
+        /* ATA belum ada di program ini — coba kandidat berikutnya */
+      }
+    }
+
+    let required: bigint;
+    try {
+      required = uiToRaw(data.config.amount, decimals);
+      if (required <= 0n) throw new Error("jumlah harus > 0");
+    } catch (e) {
+      return { error: e instanceof Error ? e.message : "jumlah tidak valid", status: 400 };
+    }
+    if (amountRaw < required) {
+      return {
+        error:
+          amountRaw === 0n
+            ? "Kamu tidak memegang token ini di wallet aktif."
+            : "Saldo token tidak cukup untuk jumlah yang akan dibakar.",
+        code: "INSUFFICIENT_BALANCE",
+        status: 402,
+      };
+    }
+    return { amountRaw: required.toString(), decimals };
+  } catch (e) {
+    console.error("[orders] preflight burn gagal:", e);
+    return { error: "Gagal memeriksa saldo token", status: 500 };
+  }
 }

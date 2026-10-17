@@ -26,7 +26,9 @@ export type ServiceKey =
   | "add_liquidity"
   | "remove_liquidity"
   | "swap"
-  | "withdraw";
+  | "withdraw"
+  | "burn"
+  | "burn_earn";
 
 export interface PriceRow {
   amount_usdc?: number;
@@ -100,6 +102,8 @@ export const SOL_REQUIREMENT: Record<ServiceKey, number> = {
   remove_liquidity: 0.01,
   swap: 0.01,
   withdraw: 0.01, // transfer fee + transfer utama + buffer
+  burn: 0.01, // burnChecked + tutup ATA bila saldo 0 (reclaim rent) + buffer
+  burn_earn: 0.01,
 };
 
 export function requiredSolFor(service: ServiceKey): number {

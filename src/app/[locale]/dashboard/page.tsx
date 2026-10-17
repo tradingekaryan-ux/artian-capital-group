@@ -9,12 +9,78 @@ export default async function DashboardPage({ params }: PageProps<"/[locale]/das
   const { locale } = await params;
   setRequestLocale(locale);
   const t = await getTranslations("dashboard");
+  const tf = await getTranslations("features");
   const user = await requireUser();
   if (!user) return null;
 
   const { wallet, kind, balances, tokens } = await load(user.id);
   const username =
     (user.user_metadata?.username as string | undefined) ?? user.email?.split("@")[0] ?? "—";
+
+  const features = [
+    {
+      href: "/create" as const,
+      title: tf("creator"),
+      desc: tf("creatorDesc"),
+      icon: (
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className="h-6 w-6">
+          <circle cx="12" cy="12" r="9" />
+          <path d="M12 8v8M8 12h8" />
+        </svg>
+      ),
+    },
+    {
+      href: { pathname: "/dashboard/tokens" } as const,
+      title: tf("createLiquidity"),
+      desc: tf("createLiquidityDesc"),
+      icon: (
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-6 w-6">
+          <path d="M12 3s6 6.5 6 11a6 6 0 1 1-12 0c0-4.5 6-11 6-11z" />
+        </svg>
+      ),
+    },
+    {
+      href: { pathname: "/dashboard/wallet" } as const,
+      title: tf("swap"),
+      desc: tf("swapDesc"),
+      icon: (
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-6 w-6">
+          <path d="M4 8h14l-3.5-3.5M20 16H6l3.5 3.5" />
+        </svg>
+      ),
+    },
+    {
+      href: { pathname: "/dashboard/tokens" } as const,
+      title: tf("removeLiquidity"),
+      desc: tf("removeLiquidityDesc"),
+      icon: (
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-6 w-6">
+          <path d="M12 4v10m0 0l-4-4m4 4l4-4M5 19h14" />
+        </svg>
+      ),
+    },
+    {
+      href: { pathname: "/dashboard/burn", query: { mode: "burn" } } as const,
+      title: tf("burn"),
+      desc: tf("burnDesc"),
+      icon: (
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-6 w-6">
+          <path d="M12 3c3 4 6 5.5 6 9.5A6 6 0 0 1 6 12.5C6 9 8 7 9 5c.5 2 1.5 3 3 3 .5-2 0-3.5 0-5z" />
+        </svg>
+      ),
+    },
+    {
+      href: { pathname: "/dashboard/burn", query: { mode: "earn" } } as const,
+      title: tf("burnEarn"),
+      desc: tf("burnEarnDesc"),
+      icon: (
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-6 w-6">
+          <circle cx="12" cy="12" r="9" />
+          <path d="M13.7 9.3c-.5-.6-1.2-.9-2-.9-1.1 0-2 .6-2 1.5 0 2.1 4.2 1.2 4.2 3.4 0 .9-.9 1.6-2.1 1.6-.8 0-1.5-.3-2-.9" />
+        </svg>
+      ),
+    },
+  ];
 
   return (
     <div className="flex flex-col gap-6">
@@ -66,6 +132,33 @@ export default async function DashboardPage({ params }: PageProps<"/[locale]/das
               <span className="mono text-sm font-bold">{shortAddress(wallet)}</span>
               <CopyButton value={wallet} />
             </div>
+          </div>
+        </div>
+      </section>
+
+      <section className="card overflow-hidden">
+        <div className="chrome">
+          <span className="chrome-dots"><span /><span /><span /></span>
+          <span className="text-muted-ink">{tf("title")}</span>
+        </div>
+        <div className="p-5">
+          <p className="text-sm font-semibold text-muted-ink">{tf("subtitle")}</p>
+          <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {features.map((f) => (
+              <Link
+                key={f.title}
+                href={f.href}
+                className="group flex flex-col gap-3 rounded-2xl border-2 border-black bg-white p-4 shadow-[3px_3px_0_0_#000] transition-transform hover:-translate-y-1 hover:bg-[#f5f3ff]"
+              >
+                <span className="inline-flex h-11 w-11 items-center justify-center rounded-xl border-2 border-black bg-[#d8ff3e] text-ink">
+                  {f.icon}
+                </span>
+                <span>
+                  <span className="block font-bold">{f.title}</span>
+                  <span className="mt-1 block text-xs font-semibold text-muted-ink">{f.desc}</span>
+                </span>
+              </Link>
+            ))}
           </div>
         </div>
       </section>

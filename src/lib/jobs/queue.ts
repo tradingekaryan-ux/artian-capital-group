@@ -7,6 +7,7 @@ export type JobType =
   | "remove_liquidity"
   | "withdraw"
   | "swap"
+  | "burn"
   | "index_wallet"
   | "price_snapshot"
   | "treasury_rebalance"

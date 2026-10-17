@@ -12,7 +12,7 @@
 > Bug yang diperbaiki saat smoke: env string-kosong tak fallback (`envOr`), race confirm Workers → tx finalized tapi dilempar expired (`recoverExpiredSignature` + order disimpan sebelum bayar), Metaplex authority/creators (`0xa`/`0x36`), Raydium feePayer asing → PrivilegeEscalation + `reject(undefined)` (gas-drop user, feePayer default owner).
 > **Sisa:** ① rotate SEMUA kredensial yang pernah lewat chat (Supabase, PAT GitHub, Helius, token Cloudflare), ② spike/aturan fee-tier pool UI (F4), ③ lupa-password flow + QR deposit (lupa-password **dihapus** — tanpa Resend; OTP withdraw = devCode), ④ ~~`JUPITER_API_KEY`~~ sudah (Server key); `RESEND_API_KEY` sengaja dikosongkan.
 
-Komunitas financial market + launcher token Solana dengan liquidity pool, on-ramp USDC (topup/withdraw dari wallet eksternal), swap in-app, pembayaran fee pakai USDC, serta **mode demo devnet + multi-wallet** untuk latihan sebelum pakai dana sungguhan — **tanpa biaya infrastruktur bulanan** (Supabase Free + Helius free + Cloudflare Workers + GitHub Actions cron).
+Komunitas financial market + launcher token Solana dengan liquidity pool, on-ramp USDC (topup/withdraw dari wallet eksternal), swap in-app, burn token & Burn-Earn (reward point), pembayaran fee pakai USDC, serta **mode demo devnet + multi-wallet** untuk latihan sebelum pakai dana sungguhan — **tanpa biaya infrastruktur bulanan** (Supabase Free + Helius free + Cloudflare Workers + GitHub Actions cron).
 
 Dokumen: [`docs/PRD.md`](docs/PRD.md) · [`docs/IMPLEMENTATION_PLAN.md`](docs/IMPLEMENTATION_PLAN.md)
 

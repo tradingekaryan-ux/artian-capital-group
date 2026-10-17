@@ -169,6 +169,13 @@ Tujuan: user bisa **belajar** membuat token & liquidity pool di jaringan uji seb
   - Gas on-chain devnet (fee, rent, Raydium creation fee) dibayar dari saldo SOL devnet milik wallet user sendiri — faucet SOL devnet sudah mencukupi; treasury devnet tidak butuh airdrop.
 - **Penandaan & isolasi data**: setiap row `orders`/`tokens`/`pools`/`wallet_events` membawa `wallet_id` + `kind` (`mainnet`|`demo`). Token/pool demo **disembunyikan** dari explore, sitemap, dan statistik publik — tetap bisa dibuka via link milik pemiliknya (badge DEMO + link explorer `?cluster=devnet`).
 
+### F-K. Burn Token & Burn & Earn + Menu Fitur Dashboard
+Tujuan: user dapat **mengurangi supply** token miliknya secara on-chain, sekaligus insentif (reward point) — semua dari dalam aplikasi.
+- **Menu fitur di dashboard**: 6 kartu — **Token Creator** (`/create`), **Create Liquidity** (`/dashboard/tokens`), **Swap Token** (`/dashboard/wallet`), **Remove Liquidity** (`/dashboard/tokens`), **Burn Token** (`/dashboard/burn?mode=burn`), **Burn & Earn** (`/dashboard/burn?mode=earn`).
+- **Burn Token**: bakar token yang dipegang wallet aktif (SPL Token **&** Token-2022 — program dideteksi otomatis). `burnChecked` + `closeAccount` saat saldo habis (rent ATA dikembalikan ke user). Dekrementasi `tokens.total_supply` bila membakar token milik sendiri. Idempoten via `burn_events` (`order_id` unik). **Mainnet saja** (demo → 403).
+- **Burn & Earn**: burn yang sama, gratis (0 USDC), user mendapat **1 reward point per token utuh** yang dibakar (`floor(amount)`), tercatat di `burn_events` + panel reward di halaman burn.
+- Gas transaksi = **dari saldo SOL user** (fee-payer = wallet user), konsisten dengan model §6.3.
+
 ---
 
 ## 5. Alur Transaksi & State Machine
@@ -218,6 +225,8 @@ requested ──(OTP benar)──▶ processing ──(tx sukses)──▶ confi
 | Kuras likuiditas | **Gratis** | gas sudah tercakup margin |
 | Swap in-app | **0.30%** dari nilai swap (min 0.05 USDC) | mencakup likuiditas route (gas swap dari SOL user) |
 | Withdrawal USDC | **0.50 USDC** flat | di atas biaya jaringan |
+| Burn Token | **0.25 USDC** flat | gas dari saldo SOL user |
+| Burn & Earn | **Gratis** | insentif reward point (§F-K) |
 | Topup | **Gratis** | |
 
 Rumus dasar harga:
@@ -376,6 +385,7 @@ Kode seluruh fase (F0–F6 + F-J) diimplementasikan; `lint + typecheck + test (2
 | F-H: explore, watchlist, komentar, statistik | ✅ Selesai | **Profil publik user** (per-user halaman) belum ada |
 | F-I: admin panel | ⚠️ Sebagian | Overview, pricing, daftar order, jobs, treasury ✅; **manual retry/refund, moderasi komentar, suspend, viewer audit log belum ada di UI** |
 | F-J: mode demo (devnet) & multi-wallet | ✅ Selesai | Multi-wallet mainnet + maks 1 wallet demo/user; create token & liquidity pool di devnet dibayar USDC devnet; deposit demo manual via faucet eksternal; WD/swap dinonaktifkan di mode demo; token/pool demo difilter dari explore/sitemap |
+| F-K: burn + Burn&Earn + menu dashboard | ✅ Selesai | Migrasi 0006 (`burn_events` + pricing `burn` 0.25 USDC / `burn_earn` gratis); mainnet saja; **izin buy/sell (transfer hook) dibatalkan** oleh user — Raydium CPMM menolak TransferHook (error 6007) |
 | §7.2 ISR | ⚠️ Deviasi | Implementasi memakai SSR dinamis + cache market 15 detik (ISR tidak dipakai) |
 | §5.1 state machine | ⚠️ Deviasi | Tidak ada status `draft`; ada `cancelled`; swap tanpa bayar di muka (lihat §5.1 yang diperbarui) |
 | Exit criteria on-chain (F1/F2/F4/F5) | ⚠️ Sebagian | Smoke devnet F1/F2 lulus dari site live (16 Okt: token SMOKE + pool CPMM); spike pembanding DEX (F4) & F5 mainnet menyusul |

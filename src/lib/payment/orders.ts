@@ -17,6 +17,7 @@ const SERVICE_JOB: Partial<Record<ServiceKey, JobType>> = {
   add_liquidity: "add_liquidity",
   remove_liquidity: "remove_liquidity",
   swap: "swap",
+  burn: "burn",
 };
 
 export interface CreateOrderInput {
@@ -27,6 +28,8 @@ export interface CreateOrderInput {
   ip?: string;
   /** `mainnet` (default) = cluster utama; `demo` = devnet, bayar USDC devnet. */
   kind?: WalletKind;
+  /** Kunci harga bila berbeda dari service (burn_earn memakai tarif 'burn_earn'). */
+  pricingKey?: ServiceKey;
 }
 
 /**
@@ -69,7 +72,7 @@ export async function createAndPayOrder(input: CreateOrderInput) {
   // Wallet sumber dana: dompet aktif bila jenisnya cocok, selain itu wallet per-kind.
   const wallet = await walletForPayment(input.userId, kind);
 
-  const price = await getPrice(input.service);
+  const price = await getPrice(input.pricingKey ?? input.service);
   const feeRaw = usdcToRaw(price.amount_usdc ?? 0);
   const payUpfront = feeRaw > 0n && input.service !== "swap";
 

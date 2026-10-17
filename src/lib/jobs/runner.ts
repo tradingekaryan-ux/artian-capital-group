@@ -19,7 +19,7 @@ import {
   removeLiquidity as poolRemoveLiquidity,
 } from "@/lib/chain/pool";
 import { executeSwapToUsdc } from "@/lib/chain/swap";
-import { rpcRead } from "@/lib/solana/connection";
+import { getConnection, rpcRead } from "@/lib/solana/connection";
 import { usdcMintFor, type WalletKind } from "@/lib/config";
 import {
   completeJob,
@@ -314,6 +314,106 @@ async function handleRemoveLiquidity(payload: Record<string, unknown>): Promise<
     .eq("id", orderId);
 }
 
+/* ───────────────── burn / burn_earn ───────────────── */
+/**
+ * Bakar token milik pemilik order (BurnChecked, fee-payer = wallet user).
+ * Bila saldo habis, ATA ikut ditutup (reclaim rent ke pemilik).
+ * Mode `burn_earn` memberi reward poin (1 poin per token utuh yang dibakar).
+ * Idempoten: signature disimpan sebelum finalisasi; retry melewati tx.
+ */
+async function handleBurn(payload: Record<string, unknown>): Promise<void> {
+  const db = supabaseAdmin();
+  const orderId = String(payload.orderId);
+  const { data: order } = await db.from("orders").select("*").eq("id", orderId).single();
+  if (!order || order.status === "confirmed") return;
+  const cfg = order.config as {
+    mint: string;
+    amountRaw: string;
+    decimals: number;
+    mode: "burn" | "burn_earn";
+  };
+  const kind = orderKind(order, payload);
+
+  let sig = order.tx_signature as string | null;
+  if (!sig) {
+    const owner = await keypairForOrder(order, kind);
+    const { Transaction, sendAndConfirmTransaction } = await import("@solana/web3.js");
+    const {
+      getAssociatedTokenAddressSync,
+      createBurnCheckedInstruction,
+      createCloseAccountInstruction,
+      TOKEN_PROGRAM_ID,
+      TOKEN_2022_PROGRAM_ID,
+    } = await import("@solana/spl-token");
+    const mint = new PublicKey(cfg.mint);
+    const conn = getConnection(kind);
+
+    // Deteksi program token: coba SPL Token lalu Token-2022.
+    let programId = TOKEN_PROGRAM_ID;
+    let ata = getAssociatedTokenAddressSync(mint, owner.publicKey);
+    let acct = await conn.getAccountInfo(ata);
+    if (!acct) {
+      programId = TOKEN_2022_PROGRAM_ID;
+      ata = getAssociatedTokenAddressSync(mint, owner.publicKey, false, undefined, TOKEN_2022_PROGRAM_ID);
+      acct = await conn.getAccountInfo(ata);
+    }
+    if (!acct) throw new Error("wallet tidak memegang token ini");
+
+    const amountRaw = BigInt(cfg.amountRaw);
+    const bal = BigInt((await conn.getTokenAccountBalance(ata)).value.amount);
+    if (bal < amountRaw) {
+      throw new Error("saldo token berkurang — jumlah melebihi saldo saat ini (gagal, coba lagi)");
+    }
+
+    const tx = new Transaction().add(
+      createBurnCheckedInstruction(ata, mint, owner.publicKey, amountRaw, cfg.decimals, [], programId),
+    );
+    if (bal === amountRaw) {
+      tx.add(createCloseAccountInstruction(ata, owner.publicKey, owner.publicKey, [], programId));
+    }
+    sig = await sendAndConfirmTransaction(conn, tx, [owner], { commitment: "confirmed" });
+    await db.from("orders").update({ tx_signature: sig }).eq("id", orderId);
+  }
+
+  const amountUi = Number(cfg.amountRaw) / 10 ** cfg.decimals;
+  const points = cfg.mode === "burn_earn" ? Math.floor(amountUi) : 0;
+
+  // Supply berkurang bila token milik user ini (baris `tokens` di DB).
+  const { data: tok } = await db
+    .from("tokens")
+    .select("id, user_id, supply")
+    .eq("mint", cfg.mint)
+    .maybeSingle();
+  if (tok && tok.user_id === order.user_id) {
+    await db
+      .from("tokens")
+      .update({ supply: Math.max(Number(tok.supply) - amountUi, 0) })
+      .eq("id", tok.id);
+  }
+
+  // Ledger reward (idempoten — order_id unique).
+  const { data: existingEv } = await db
+    .from("burn_events")
+    .select("id")
+    .eq("order_id", orderId)
+    .maybeSingle();
+  if (!existingEv) {
+    await db.from("burn_events").insert({
+      user_id: order.user_id,
+      wallet_id: order.wallet_id ?? null,
+      order_id: orderId,
+      mint: cfg.mint,
+      mode: cfg.mode,
+      amount_raw: cfg.amountRaw,
+      amount_ui: amountUi,
+      points,
+      tx: sig,
+    });
+  }
+
+  await db.from("orders").update({ status: "confirmed", tx_signature: sig }).eq("id", orderId);
+}
+
 /* ───────────────── withdraw (hanya mainnet/live) ───────────────── */
 async function handleWithdraw(payload: Record<string, unknown>): Promise<void> {
   const db = supabaseAdmin();
@@ -594,6 +694,7 @@ const handlers: Record<JobType, Handler> = {
   create_pool: handleCreatePool,
   add_liquidity: handleAddLiquidity,
   remove_liquidity: handleRemoveLiquidity,
+  burn: handleBurn,
   withdraw: handleWithdraw,
   swap: handleSwap,
   index_wallet: handleIndexWallet,
