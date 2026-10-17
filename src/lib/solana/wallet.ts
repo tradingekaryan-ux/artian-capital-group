@@ -17,9 +17,10 @@ export interface WalletRow {
   iv: string;
   auth_tag: string;
   created_at?: string;
+  archived_at?: string | null;
 }
 
-const SELECT_WALLET = "id, user_id, kind, label, public_key, enc_secret_key, iv, auth_tag, created_at";
+const SELECT_WALLET = "id, user_id, kind, label, public_key, enc_secret_key, iv, auth_tag, created_at, archived_at";
 
 async function insertWallet(
   userId: string,
@@ -60,6 +61,7 @@ export async function ensureWallet(
     .select(SELECT_WALLET)
     .eq("user_id", userId)
     .eq("kind", kind)
+    .is("archived_at", null)
     .order("created_at", { ascending: true })
     .limit(1)
     .maybeSingle();
@@ -78,6 +80,7 @@ export async function ensureWallet(
       .select(SELECT_WALLET)
       .eq("user_id", userId)
       .eq("kind", kind)
+      .is("archived_at", null)
       .order("created_at", { ascending: true })
       .limit(1)
       .maybeSingle();
@@ -99,7 +102,7 @@ export async function createMainnetWallet(userId: string, label?: string): Promi
   return insertWallet(userId, "mainnet", finalLabel);
 }
 
-/** Buat wallet demo (maks 1 per user). Bila sudah ada, kembalikan yang existing. */
+/** Buat wallet demo (maks 1 per user aktif). Bila sudah ada (non-arsip), kembalikan existing. */
 export async function createDemoWallet(userId: string): Promise<WalletRow> {
   const db = supabaseAdmin();
   const { data: existing } = await db
@@ -107,6 +110,7 @@ export async function createDemoWallet(userId: string): Promise<WalletRow> {
     .select(SELECT_WALLET)
     .eq("user_id", userId)
     .eq("kind", "demo")
+    .is("archived_at", null)
     .maybeSingle();
   if (existing) return existing as WalletRow;
   await ensureProfile(userId);
@@ -118,23 +122,63 @@ export async function createDemoWallet(userId: string): Promise<WalletRow> {
       .select(SELECT_WALLET)
       .eq("user_id", userId)
       .eq("kind", "demo")
+      .is("archived_at", null)
       .maybeSingle();
     if (again) return again as WalletRow;
     throw e;
   }
 }
 
-/** Daftar semua wallet user (mainnet dulu, lalu demo). */
+/** Daftar semua wallet user aktif (non-arsip; mainnet dulu, lalu demo). */
 export async function listWallets(userId: string): Promise<WalletRow[]> {
   const db = supabaseAdmin();
   const { data } = await db
     .from("wallets")
     .select(SELECT_WALLET)
     .eq("user_id", userId)
+    .is("archived_at", null)
     .order("kind", { ascending: true }) // 'demo' < 'mainnet' — dibalik di bawah
     .order("created_at", { ascending: true });
   const rows = (data ?? []) as WalletRow[];
   return rows.sort((a, b) => (a.kind === b.kind ? 0 : a.kind === "mainnet" ? -1 : 1));
+}
+
+/** Daftar SEMUA wallet user termasuk yang diarsipkan (untuk admin). */
+export async function listAllWallets(userId: string): Promise<WalletRow[]> {
+  const db = supabaseAdmin();
+  const { data } = await db
+    .from("wallets")
+    .select(SELECT_WALLET)
+    .eq("user_id", userId)
+    .order("kind", { ascending: true })
+    .order("created_at", { ascending: true });
+  const rows = (data ?? []) as WalletRow[];
+  return rows.sort((a, b) => (a.kind === b.kind ? 0 : a.kind === "mainnet" ? -1 : 1));
+}
+
+/**
+ * Arsipkan wallet (soft-delete). Wallet yang diarsipkan hilang dari tampilan
+ * user & tidak bisa jadi wallet aktif; tetap terlihat di panel admin.
+ * Melempar error bila wallet bukan milik userId atau sudah diarsipkan.
+ */
+export async function archiveWallet(userId: string, walletId: string): Promise<WalletRow> {
+  const db = supabaseAdmin();
+  const { data: row } = await db
+    .from("wallets")
+    .select(SELECT_WALLET)
+    .eq("id", walletId)
+    .eq("user_id", userId)
+    .maybeSingle();
+  if (!row) throw new Error("Wallet not found");
+  if ((row as WalletRow).archived_at) throw new Error("Already archived");
+  const { data: updated, error } = await db
+    .from("wallets")
+    .update({ archived_at: new Date().toISOString() })
+    .eq("id", walletId)
+    .select(SELECT_WALLET)
+    .single();
+  if (error) throw error;
+  return updated as WalletRow;
 }
 
 export async function getWalletById(walletId: string): Promise<WalletRow | null> {

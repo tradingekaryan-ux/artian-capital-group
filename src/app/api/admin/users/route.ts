@@ -38,7 +38,7 @@ export async function GET(req: Request) {
         { data: withdrawals },
       ] = await Promise.all([
         db.from("profiles").select("*").eq("user_id", id).maybeSingle(),
-        db.from("wallets").select("id, public_key, kind").eq("user_id", id),
+        db.from("wallets").select("id, public_key, kind, label, archived_at").eq("user_id", id).order("created_at", { ascending: true }),
         db
           .from("balances_cache")
           .select("wallet_id, usdc_raw, sol_lamports, refreshed_at")
@@ -65,8 +65,8 @@ export async function GET(req: Request) {
           .limit(20),
       ]);
 
-      // Hanya dompet mainnet — data devnet/demo dikecualikan dari dashboard admin.
-      const wallet = (wallets ?? []).find((w) => w.kind === "mainnet") ?? null;
+      // Dompet mainnet aktif (non-arsip) untuk display saldo.
+      const wallet = (wallets ?? []).find((w) => w.kind === "mainnet" && !w.archived_at) ?? null;
       const bal = (bals ?? []).find((b) => b.wallet_id === wallet?.id) ?? null;
 
       return NextResponse.json({
@@ -86,6 +86,13 @@ export async function GET(req: Request) {
         tokens: tokens ?? [],
         orders: orders ?? [],
         withdrawals: withdrawals ?? [],
+        wallets: (wallets ?? []).map((w) => ({
+          id: w.id,
+          kind: w.kind,
+          label: w.label ?? null,
+          public_key: w.public_key,
+          archived_at: w.archived_at ?? null,
+        })),
       });
     }
 

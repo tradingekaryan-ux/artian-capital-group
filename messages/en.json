@@ -299,7 +299,10 @@
     "withdrawsWithFee": "Withdrawals with fee",
     "tokensCount": "Tokens",
     "ordersCount": "Orders",
-    "mainnetOnlyNote": "Devnet/demo data is excluded from this dashboard — tokens, wallets, balances, orders and revenue count real mainnet activity only."
+    "mainnetOnlyNote": "Devnet/demo data is excluded from this dashboard — tokens, wallets, balances, orders and revenue count real mainnet activity only.",
+    "archived": "Archived",
+    "walletsAll": "All wallets",
+    "archiveWallet": "Archive wallet"
   },
   "fees": {
     "title": "How fees work",

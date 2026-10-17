@@ -26,6 +26,7 @@ interface UserDetail {
   tokens: { mint: string; name: string; symbol: string; supply: string; status: string; created_at: string }[];
   orders: { id: string; service: string; amount_raw: string; status: string; payment_signature: string | null; created_at: string }[];
   withdrawals: { id: string; amount_raw: string; fee_raw: string | null; status: string; tx_signature: string | null; fee_tx: string | null; created_at: string }[];
+  wallets: { id: string; kind: string; label: string | null; public_key: string; archived_at: string | null }[];
 }
 
 const rawToUsdc = (raw: string) => Number(raw ?? 0) / 1_000_000;
@@ -238,6 +239,24 @@ function UserDetailView({
           {t("reindex")}
         </button>
       </div>
+      {/* Wallet list — semua (termasuk archived) */}
+      {detail.wallets?.length ? (
+        <div>
+          <p className="mb-1 text-[10px] font-bold uppercase tracking-wide text-muted-ink">{t("walletsAll")}</p>
+          <ul className="flex flex-col gap-1">
+            {detail.wallets.map((w) => (
+              <li key={w.id} className="flex items-center gap-2 text-xs">
+                <span className="mono font-bold">{shortAddress(w.public_key, 6)}</span>
+                <span className="rounded-full border border-black/20 bg-[#f4f4f5] px-1.5 py-0.5 text-[10px] uppercase">{w.kind}</span>
+                {w.archived_at && (
+                  <span className="rounded-full border border-black/20 bg-[#fee2e2] px-1.5 py-0.5 text-[10px] uppercase text-[#b91c1c]">{t("archived")}</span>
+                )}
+                {w.label && <span className="text-muted-ink">{w.label}</span>}
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
       <div className="grid gap-4 lg:grid-cols-3">
         <div>
           <p className="mb-1 text-[10px] font-bold uppercase tracking-wide text-muted-ink">{t("recentTokens")}</p>

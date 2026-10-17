@@ -44,6 +44,24 @@ export function WalletSwitcher({ wallets, activeId }: { wallets: WalletItem[]; a
     await post("/api/wallet", { action: kind === "demo" ? "create_demo" : "create_mainnet", label });
   }
 
+  async function archiveWalletAction(walletId: string) {
+    if (!window.confirm("Archive this wallet? It will be hidden from your list.")) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/wallet/${walletId}`, { method: "DELETE" });
+      if (!res.ok) {
+        const data = (await res.json().catch(() => null)) as { error?: string } | null;
+        throw new Error(data?.error ?? `HTTP ${res.status}`);
+      }
+      router.refresh();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
     <div className="card overflow-hidden">
       <div className="chrome">
@@ -54,29 +72,42 @@ export function WalletSwitcher({ wallets, activeId }: { wallets: WalletItem[]; a
         {wallets.map((w) => {
           const active = w.id === activeId;
           return (
-            <button
-              key={w.id}
-              type="button"
-              disabled={busy || active}
-              onClick={() => post("/api/wallet/active", { walletId: w.id })}
-              className={`flex items-center justify-between gap-2 rounded-xl border-2 border-black px-3 py-2 text-left text-sm font-bold transition-transform ${
-                active
-                  ? "bg-[#d8ff3e] shadow-[3px_3px_0_0_#000]"
-                  : "bg-white hover:-translate-y-0.5"
-              }`}
-            >
-              <span className="flex min-w-0 items-center gap-2">
-                <span className="mono truncate text-xs">{w.public_key.slice(0, 6)}…{w.public_key.slice(-4)}</span>
-                {w.kind === "demo" && (
-                  <span className="rounded-full border-2 border-black bg-[#f5f3ff] px-2 py-0.5 text-[10px] uppercase">
-                    {t("demoBadge")}
-                  </span>
-                )}
-              </span>
-              <span className="shrink-0 text-[10px] uppercase tracking-wide text-muted-ink">
-                {active ? t("active") : w.kind === "demo" ? t("demo") : t("mainnet")}
-              </span>
-            </button>
+            <div key={w.id} className="flex items-center gap-2">
+              <button
+                type="button"
+                disabled={busy || active}
+                onClick={() => post("/api/wallet/active", { walletId: w.id })}
+                className={`flex flex-1 items-center justify-between gap-2 rounded-xl border-2 border-black px-3 py-2 text-left text-sm font-bold transition-transform ${
+                  active
+                    ? "bg-[#d8ff3e] shadow-[3px_3px_0_0_#000]"
+                    : "bg-white hover:-translate-y-0.5"
+                }`}
+              >
+                <span className="flex min-w-0 items-center gap-2">
+                  <span className="mono truncate text-xs">{w.public_key.slice(0, 6)}…{w.public_key.slice(-4)}</span>
+                  {w.kind === "demo" && (
+                    <span className="rounded-full border-2 border-black bg-[#f5f3ff] px-2 py-0.5 text-[10px] uppercase">
+                      {t("demoBadge")}
+                    </span>
+                  )}
+                </span>
+                <span className="shrink-0 text-[10px] uppercase tracking-wide text-muted-ink">
+                  {active ? t("active") : w.kind === "demo" ? t("demo") : t("mainnet")}
+                </span>
+              </button>
+              {/* Archive button — only show when not active */}
+              {!active && (
+                <button
+                  type="button"
+                  disabled={busy}
+                  title="Archive wallet"
+                  onClick={() => void archiveWalletAction(w.id)}
+                  className="shrink-0 rounded-lg border-2 border-black bg-white px-2 py-1.5 text-[11px] font-bold uppercase hover:bg-[#fee2e2] disabled:opacity-40"
+                >
+                  ✕
+                </button>
+              )}
+            </div>
           );
         })}
         <div className="mt-1 flex flex-wrap gap-2">
