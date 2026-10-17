@@ -91,13 +91,14 @@ export function swapFeeRaw(inAmountRaw: bigint, percent: number, minUsdc: number
 
 /**
  * Estimasi minimum saldo SOL (dalam SOL, sudah termasuk buffer) yang harus
- * dimiliki wallet user PER LAYANAN — gas on-chain dibayar langsung dari saldo
- * SOL user (wallet user = fee-payer), platform tidak mendanai treasury.
- * Dipakai sebagai preflight sebelum order dibuat/dibayar (402 bila kurang).
+ * dimiliki wallet user PER LAYANAN — syarat SALDO saat preflight, bukan biaya
+ * riil. Gas on-chain dibayar langsung dari saldo SOL user (wallet user =
+ * fee-payer), platform tidak mendanai treasury. Dipakai sebelum order dibuat/
+ * dibayar (402 bila kurang) — angka tampilan ke user memakai `GAS_ESTIMATE`.
  */
 export const SOL_REQUIREMENT: Record<ServiceKey, number> = {
-  create_token: 0.03, // bayar fee + mint rent + metadata + ATA + gas, buffer
-  create_pool: 0.31, // bayar fee + protokol CPMM 0.15 SOL + rent pool/vault + buffer
+  create_token: 0.025, // biaya riil ≈0.010–0.020 (rent mint/metadata/ATA + fee tx) + buffer tipis
+  create_pool: 0.28, // biaya riil ≈0.20–0.26 (protokol CPMM 0.15 SOL + rent pool/vault) + buffer tipis
   add_liquidity: 0.01,
   remove_liquidity: 0.01,
   swap: 0.01,
@@ -106,8 +107,29 @@ export const SOL_REQUIREMENT: Record<ServiceKey, number> = {
   burn_earn: 0.01,
 };
 
+/**
+ * Estimasi biaya gas ON-CHAIN RIEL per layanan — dipakai untuk TAMPILAN ke
+ * user (wallet fee-card, wizard Review & pay) supaya angka yang dilihat adalah
+ * perkiraan biaya nyata, bukan buffer preflight `SOL_REQUIREMENT`.
+ */
+export const GAS_ESTIMATE: Record<ServiceKey, number> = {
+  create_token: 0.02, // riil ≈0.010–0.020 SOL
+  create_pool: 0.2, // riil ≈0.20–0.26 SOL (protokol CPMM 0.15 + rent)
+  add_liquidity: 0.01,
+  remove_liquidity: 0.01,
+  swap: 0.01,
+  withdraw: 0.01,
+  burn: 0.01,
+  burn_earn: 0.01,
+};
+
 export function requiredSolFor(service: ServiceKey): number {
   return SOL_REQUIREMENT[service] ?? 0.01;
+}
+
+/** Estimasi gas riil untuk tampilan (bukan syarat saldo). */
+export function gasEstimateFor(service: ServiceKey): number {
+  return GAS_ESTIMATE[service] ?? 0.01;
 }
 
 /** Total biaya withdrawal = flat + (buffer jaringan opsional). */

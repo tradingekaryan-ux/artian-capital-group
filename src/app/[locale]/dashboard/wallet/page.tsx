@@ -2,7 +2,7 @@ import { getTranslations, setRequestLocale } from "next-intl/server";
 import { requireUser, supabaseAdmin } from "@/lib/db/client";
 import { usdcMintFor, explorerClusterParam, type WalletKind } from "@/lib/config";
 import { getActiveWallet, readOnChainBalances } from "@/lib/solana/wallet";
-import { getPrice, getPricing, requiredSolFor, type PriceRow, type ServiceKey } from "@/lib/payment/pricing";
+import { getPrice, getPricing, gasEstimateFor, type PriceRow, type ServiceKey } from "@/lib/payment/pricing";
 import { CopyButton } from "@/components/copy-button";
 import { WithdrawCard } from "@/components/wallet/withdraw-card";
 import { SwapCard } from "@/components/wallet/swap-card";
@@ -216,7 +216,7 @@ export default async function WalletPage({ params }: PageProps<"/[locale]/dashbo
                       <td className="py-2 pr-2 font-semibold">{svcLabel[k]}</td>
                       <td className="py-2 px-2">{feeText(pricing[k])}</td>
                       <td className="py-2 pl-2 text-right font-bold">
-                        ±{requiredSolFor(k).toFixed(2)}
+                        ±{gasEstimateFor(k).toFixed(2)}
                       </td>
                     </tr>
                   ))}

@@ -8,6 +8,8 @@ import {
   U64_MAX,
   requiredSolFor,
   SOL_REQUIREMENT,
+  gasEstimateFor,
+  GAS_ESTIMATE,
 } from "./pricing";
 
 describe("pricing (pure)", () => {
@@ -89,10 +91,18 @@ describe("requiredSolFor (preflight gas user)", () => {
 
   it("biaya pembuatan pool jauh lebih besar dari layanan lain (CPMM fee 0.15 SOL)", () => {
     expect(SOL_REQUIREMENT.create_pool).toBeGreaterThan(SOL_REQUIREMENT.create_token);
-    expect(SOL_REQUIREMENT.create_pool).toBeGreaterThan(0.3);
+    expect(SOL_REQUIREMENT.create_pool).toBeGreaterThan(0.25); // riil ≈0.20–0.26 + buffer
+    expect(SOL_REQUIREMENT.create_pool).toBeGreaterThanOrEqual(0.26); // ≥ kebutuhan builder on-chain
+  });
+
+  it("estimasi tampilan (GAS_ESTIMATE) tidak pernah melebihi syarat saldo", () => {
+    expect(GAS_ESTIMATE.create_token).toBeLessThanOrEqual(SOL_REQUIREMENT.create_token);
+    expect(GAS_ESTIMATE.create_pool).toBeLessThanOrEqual(SOL_REQUIREMENT.create_pool);
+    expect(gasEstimateFor("create_token")).toBeGreaterThan(0);
   });
 
   it("service tak dikenal fallback ke kebutuhan kecil", () => {
     expect(requiredSolFor("bogus" as never)).toBe(0.01);
+    expect(gasEstimateFor("bogus" as never)).toBe(0.01);
   });
 });

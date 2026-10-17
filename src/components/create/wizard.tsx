@@ -10,9 +10,12 @@ interface Props {
   priceUsdc: number;
   /** Fee pembuatan pool (USDC) — di-charge otomatis setelah token confirmed. */
   poolFeeUsdc: number;
-  /** Estimasi gas SOL per layanan (dari SOL_REQUIREMENT server). */
+  /** Estimasi gas ON-CHAIN riil per layanan (tampilan — GAS_ESTIMATE server). */
   gasCreateSol: number;
   gasPoolSol: number;
+  /** Syarat saldo SOL preflight (SOL_REQUIREMENT server) — dipakai cek cukup/tidak. */
+  reqCreateSol: number;
+  reqPoolSol: number;
   /** `demo` (devnet) = order dibayar USDC devnet, hasil token devnet. */
   kind?: "mainnet" | "demo";
 }
@@ -54,6 +57,8 @@ export function CreateTokenWizard({
   poolFeeUsdc,
   gasCreateSol,
   gasPoolSol,
+  reqCreateSol,
+  reqPoolSol,
   kind = "mainnet",
 }: Props) {
   const t = useTranslations("create");
@@ -279,9 +284,11 @@ export function CreateTokenWizard({
   const feeNow = priceUsdc;
   const feeAfter = poolActive ? poolFeeUsdc : 0;
   const totalUsdcFees = feeNow + feeAfter;
+  // totalGas = estimasi biaya riil (tampilan); reqGas = syarat saldo preflight API.
   const totalGas = gasCreateSol + (poolActive ? gasPoolSol : 0);
+  const reqGas = reqCreateSol + (poolActive ? reqPoolSol : 0);
   const insuffUsdc = balance !== null && balance < totalUsdcFees;
-  const insuffSol = sol !== null && sol < totalGas;
+  const insuffSol = sol !== null && sol < reqGas;
   const insufficient = insuffUsdc || insuffSol;
   // ── Derivasi market dari stepper ──────────────────────────────────────
   const supplyNum = Number(state.supply) || 0;
@@ -574,7 +581,7 @@ export function CreateTokenWizard({
           )}
           {insuffSol && (
             <p className="text-sm font-bold text-[#b91c1c]">
-              {t("insufficientSol", { amount: totalGas })}
+              {t("insufficientSol", { amount: reqGas })}
             </p>
           )}
           {error && <p className="text-sm font-bold text-[#b91c1c]">{error}</p>}

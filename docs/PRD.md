@@ -216,10 +216,12 @@ requested ──(OTP benar)──▶ processing ──(tx sukses)──▶ confi
 | Swap (Jupiter) | fee jaringan + fee pool DEX |
 | Transfer USDC (bayar layanan / withdrawal) | ≈ 0.000005 SOL |
 
+> **Angka vs syarat saldo (17 Okt):** yang ditampilkan ke user = **estimasi riil** `GAS_ESTIMATE` (**0.02 SOL** token / **0.2 SOL** pool — dipakai wizard *Review & pay* & kartu fee di wallet); syarat saldo preflight `SOL_REQUIREMENT` = **0.025 / 0.28 SOL** (buffer tipis di atas biaya riil; gateway402 bila kurang).
+
 ### 6.2 Harga contoh ke user (dalam USDC)
 | Layanan | Harga | Catatan |
 |---|---|---|
-| Create token | **2 USDC** | sudah termasuk seluruh biaya on-chain + margin tipis |
+| Create token | **2 USDC** | fee platform; gas on-chain (≈0.01–0.02 SOL) dari saldo SOL user — lihat §6.1 |
 | Buat liquidity pool | **10 USDC** + dana LP (dari saldo user) | biaya rent pool besar → ditanggung penuh user |
 | Tambah likuiditas | **1 USDC** | flat |
 | Kuras likuiditas | **Gratis** | gas sudah tercakup margin |

@@ -1,7 +1,7 @@
 import { getTranslations, setRequestLocale } from "next-intl/server";
 import { redirect } from "next/navigation";
 import { requireUser } from "@/lib/db/client";
-import { getPrice, requiredSolFor } from "@/lib/payment/pricing";
+import { getPrice, requiredSolFor, gasEstimateFor } from "@/lib/payment/pricing";
 import { getActiveWallet } from "@/lib/solana/wallet";
 import { CreateTokenWizard } from "@/components/create/wizard";
 
@@ -25,8 +25,10 @@ export default async function CreatePage({ params }: PageProps<"/[locale]/create
       <CreateTokenWizard
         priceUsdc={price.amount_usdc ?? 2}
         poolFeeUsdc={poolPrice.amount_usdc ?? 10}
-        gasCreateSol={requiredSolFor("create_token")}
-        gasPoolSol={requiredSolFor("create_pool")}
+        gasCreateSol={gasEstimateFor("create_token")}
+        gasPoolSol={gasEstimateFor("create_pool")}
+        reqCreateSol={requiredSolFor("create_token")}
+        reqPoolSol={requiredSolFor("create_pool")}
         kind={kind}
       />
     </div>
