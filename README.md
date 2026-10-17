@@ -1,17 +1,18 @@
 # Artian Capital Group
 
-> **Status pembangunan (16 Okt 2026):** kode lengkap, `lint/typecheck/test/build` hijau (38 halaman), **smoke test on-chain end-to-end LULUS di devnet**.
+> **Status pembangunan (17 Okt 2026):** kode lengkap, `lint/typecheck/test (24 kasus)/build` hijau, **smoke test on-chain end-to-end LULUS di devnet**.
 > Database Supabase **`vysgkjqbmgbbowsxafok`** sudah hidup: `apply_all.sql` (0001_init + 0002_storage + seed pricing) lewat MCP `apply_migration`; RLS advisors bersih; bucket `token-assets` aktif.
 > Smoke test lulus: landing/explore/token detail/create/dashboard/admin (role guard + API 403), signup email (SMTP Supabase), auto-`profiles`+`wallets` ter-encrypt, seed 2 token live tampil & ter-sitemap.
 > SEO: `robots.txt`, `sitemap.xml` (static + token live), JSON-LD `WebSite` + `WebPage`+harga.
 > GitHub: repo **public** `tradingekaryan-ux/artian-capital-group` (public → lulus validasi faucet), CI hijau, 7 actions secrets terpasang, **Job Worker terverifikasi jalan end-to-end**.
 > Adapter Cloudflare terpasang (`@opennextjs/cloudflare` + `wrangler.jsonc` + wrapper `scripts/cf-deploy.mjs` utk macOS < 13.5).
 > **LIVE di produksi:** <https://artian-capital-group.trading-ekaryan.workers.dev> (secrets runtime terpasang; smoke login/dashboard/explore/token/admin lulus; sitemap/robots/JSON-LD memakai URL produksi).
+> **Mode demo + multi-wallet (17 Okt):** tiap user punya banyak wallet mainnet + maks 1 wallet demo (devnet, deposit via faucet eksternal), create token/pool/LP di devnet dibayar USDC devnet; WD/swap dinonaktifkan di demo; registrasi diberi notifikasi batas SMTP Supabase ≈3 user/jam; **PostHog aktif**, `JUPITER_API_KEY` (Server key) terpasang sebagai Worker secret.
 > **On-chain devnet (via site live + worker lokal):** Helius key aktif, treasury 2.5 SOL (faucet.solana.com), wallet test 20 USDC (Circle) — order `create_token` (2 USDC → fee) → token **SMOKE** `7jjqC5F…` live (supply 1e9, mint+freeze revoked, muncul di explore) → order `create_pool` (10 USDC) → pool Raydium CPMM `Bb8qZniU…` aktif on-chain; order `confirmed` + `pools`/`tokens` tercatat.
 > Bug yang diperbaiki saat smoke: env string-kosong tak fallback (`envOr`), race confirm Workers → tx finalized tapi dilempar expired (`recoverExpiredSignature` + order disimpan sebelum bayar), Metaplex authority/creators (`0xa`/`0x36`), Raydium feePayer asing → PrivilegeEscalation + `reject(undefined)` (gas-drop user, feePayer default owner).
-> **Sisa:** ① rotate SEMUA kredensial yang pernah lewat chat (Supabase, PAT GitHub, Helius, token Cloudflare), ② spike/aturan fee-tier pool UI (F4), ③ lupa-password flow + QR deposit, ④ `JUPITER_API_KEY`/`RESEND_API_KEY` bila perlu.
+> **Sisa:** ① rotate SEMUA kredensial yang pernah lewat chat (Supabase, PAT GitHub, Helius, token Cloudflare), ② spike/aturan fee-tier pool UI (F4), ③ lupa-password flow + QR deposit (lupa-password **dihapus** — tanpa Resend; OTP withdraw = devCode), ④ ~~`JUPITER_API_KEY`~~ sudah (Server key); `RESEND_API_KEY` sengaja dikosongkan.
 
-Komunitas financial market + launcher token Solana dengan liquidity pool, on-ramp USDC (topup/withdraw dari wallet eksternal), swap in-app, dan pembayaran fee pakai USDC — **tanpa biaya infrastruktur bulanan** (Supabase Free + Helius free + Cloudflare Pages + GitHub Actions cron).
+Komunitas financial market + launcher token Solana dengan liquidity pool, on-ramp USDC (topup/withdraw dari wallet eksternal), swap in-app, pembayaran fee pakai USDC, serta **mode demo devnet + multi-wallet** untuk latihan sebelum pakai dana sungguhan — **tanpa biaya infrastruktur bulanan** (Supabase Free + Helius free + Cloudflare Workers + GitHub Actions cron).
 
 Dokumen: [`docs/PRD.md`](docs/PRD.md) · [`docs/IMPLEMENTATION_PLAN.md`](docs/IMPLEMENTATION_PLAN.md)
 
@@ -51,15 +52,18 @@ supabase/migrations/0002_storage.sql# bucket `token-assets` (public, 5MB)
 | `npm run typecheck` | `next typegen && tsc --noEmit` |
 | `npm run build` | production build |
 | `npm run worker` | worker job on-chain (atau via GitHub Actions cron) |
+| `npm run deploy:cf` | build OpenNext + deploy ke Cloudflare Workers (butuh `CLOUDFLARE_API_TOKEN` + `CLOUDFLARE_ACCOUNT_ID`) |
 
 ## Environment
 
 Lihat [`.env.example`](.env.example). Catatan:
 
-- `NEXT_PUBLIC_SOLANA_CLUSTER=devnet|mainnet-beta` — USDC mint otomatis (`USDC_MINT` bisa dioverride).
+- `NEXT_PUBLIC_SOLANA_CLUSTER=devnet|mainnet-beta` — USDC mint otomatis (`USDC_MINT` bisa dioverride). Saat ini **devnet**.
 - `HELIUS_API_KEY` opsional (tanpa itu pakai RPC publik) — tanpa Helius, pemindaian balance TX paling akurat (getSignaturesForAddress) tidak tersedia dan terpaksa fallback.
-- `RESEND_API_KEY` opsional — tanpa ini kode OTP tampil di log dev saja.
-- `JUPITER_API_KEY` opsional untuk rate limit tinggi.
+- `RESEND_API_KEY` **sengaja kosong** (keputusan 17 Okt): tanpa reset password; kode OTP withdraw tampil langsung di UI (devCode, mode MVP).
+- `JUPITER_API_KEY` sudah terisi (Server key dari developers.jup.ag) + terpasang sebagai Worker secret.
+- Registrasi dibatasi ≈3 user/jam oleh SMTP Supabase — halaman register memberi tahu user bila batas tercapai.
+- Inventaris secret lokal: `SECRETS.md` (gitignored, tidak ikut repo).
 
 ## CI/CD
 

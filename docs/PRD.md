@@ -3,9 +3,9 @@
 
 | | |
 |---|---|
-| **Versi** | 1.1 |
-| **Tanggal** | 16 Oktober 2026 |
-| **Status** | Kode Fase 1 selesai — `lint + typecheck + test + build` hijau; verifikasi devnet & deploy menyusul |
+| **Versi** | 1.2 |
+| **Tanggal** | 17 Oktober 2026 |
+| **Status** | **LIVE** di Cloudflare Workers; smoke on-chain devnet lulus; mode demo + multi-wallet aktif; `lint + typecheck + test + build` hijau |
 | **Penyesuaian** | Disesuaikan dengan implementasi aktual (lihat §13) |
 | **Layanan fase 1** | Pembuatan token crypto (Solana) + Liquidity Pool + Market Data |
 | **Target pasar** | Global (Bahasa Inggris & Bahasa Indonesia) |
@@ -77,7 +77,8 @@ Satu website tempat user:
 ## 4. Ringkasan Fitur (Fase 1 — Full Scope)
 
 ### F-A. Akun & Autentikasi
-- Registrasi email + verifikasi OTP, login, lupa password, sesi (refresh token).
+- Registrasi email + verifikasi OTP, login, sesi (refresh token). **Tanpa reset password** (keputusan 17 Okt — layanan email Resend tidak dipakai).
+- **Batas registrasi**: SMTP default Supabase ≈ **3 user/jam** — halaman register menampilkan notifikasi batas ini, dan error rate limit dipetakan ke pesan ramah (en/id).
 - **Setelah akun dibuat, wallet Solana dibuat otomatis** (keypair baru, 1:1 dengan akun).
 - Halaman **Wallet** menampilkan: alamat public, saldo USDC, riwayat transaksi on-chain, tombol *Copy / Explorer*.
 - **Private key tidak pernah ditampilkan atau diekspor** di fase 1 (non-exportable).
@@ -241,7 +242,7 @@ buffer_gas default 15% (fluktuasi harga SOL & priority fee)
 | Isolasi | Private key tidak pernah dikirim ke client, tidak muncul di API response, tidak di-log |
 | Akses | Semua endpoint mutasi wajib session; RLS Supabase per user; role `admin` terpisah |
 | Penarikan dana | Konfirmasi OTP email, validasi alamat, audit log, rate limit per user/IP |
-| Anti-abuse | Rate limit (registrasi, order, cek saldo), idempotency key, validasi input ketat |
+| Anti-abuse | Rate limit (registrasi ≈3 user/jam via SMTP Supabase + notice di halaman register, order, cek saldo), idempotency key, validasi input ketat |
 | Supply chain | Pin dependensi, `npm audit` saat CI, tanpa dependensi eksotis di jalur signing |
 | Transparansi | Setiap aksi menyimpan `tx_signature` yang bisa diverifikasi publik |
 
@@ -355,25 +356,25 @@ jobs                — type(create_token|create_pool|add_liquidity|remove_liqui
 
 ---
 
-## 13. Status Implementasi & Deviasi (16 Oktober 2026)
+## 13. Status Implementasi & Deviasi (17 Oktober 2026)
 
-Kode seluruh fase (F0–F6) telah diimplementasikan; `lint + typecheck + test (10 kasus) + build` hijau; CI (`ci.yml`) & worker cron (`worker.yml`) aktif. Database Supabase `vysgkjqbmgbbowsxafok` sudah live (migrasi + seed pricing lewat MCP `apply_migration`); smoke test lokal lulus (auth → auto-`profiles`/`wallets`, explore/token/dashboard/admin, signup email SMTP Supabase). Sisa pekerjaan yang menuntut resource eksternal: pendanaan devnet (Helius key + airdrop treasury), spike F4, deploy GitHub/Cloudflare Pages.
+Kode seluruh fase (F0–F6 + F-J) diimplementasikan; `lint + typecheck + test (24 kasus) + build` hijau; CI (`ci.yml`) & worker cron (`worker.yml`) aktif. Database Supabase `vysgkjqbmgbbowsxafok` live dengan migrasi **0001–0004** (multi-wallet + audit fix) lewat MCP `apply_migration`; RLS advisors bersih. **LIVE di produksi:** <https://artian-capital-group.trading-ekaryan.workers.dev> (Cloudflare Workers, `npm run deploy:cf`, secrets runtime terpasang termasuk `JUPITER_API_KEY` Server key & PostHog aktif). Smoke on-chain devnet lulus dari site live (create token **SMOKE** + pool Raydium CPMM aktif). Sisa: spike pembanding DEX (F4), fitur gap di tabel bawah, rotate kredensial yang pernah lewat chat.
 
 | Area (referensi §) | Status | Catatan deviasi / gap |
 |---|---|---|
 | F-A: register + OTP + login + sesi | ✅ Selesai | — |
 | F-A: wallet otomatis 1:1 dengan akun | ✅ Selesai | Dibuat via `ensureProfile`/`ensureWallet` di aplikasi (bukan trigger DB `handle_new_user`) |
-| F-A: lupa password | ❌ Belum | Jalur reset password belum dibuat |
+| F-A: lupa password | ❌ Dihapus (keputusan) | Tanpa Resend — reset password di luar scope fase 1 |
 | F-B: topup & saldo otomatis | ✅ Selesai | Baca saldo on-chain + konfirmasi tx → `wallet_events`; **QR deposit belum ada**; scan riwayat penuh membutuh Helius (tanpa itu keterbatasan RPC publik) |
 | F-C: create token end-to-end | ✅ Selesai | Payer treasury, mint/freeze authority → wallet user (revoke opsional), immutable opsional, metadata di Storage |
 | F-D: halaman profil token | ✅ Selesai | `generateMetadata` + OG, chart, statistik, panel pool, komentar, watchlist |
 | F-D/§7.4: JSON-LD, `sitemap.xml`, `robots.txt` | ✅ Selesai | `robots.txt` (blok `/api/`, admin, verify), `sitemap.xml` (static ×2 locale + token live dari DB), JSON-LD `WebSite`+`SearchAction` di layout & `WebPage`+`Offer` di halaman token |
 | F-E: liquidity pool (Raydium CPMM) | ⚠️ Sebagian | Pair **USDC** berfungsi; **SOL sebagai quote belum tersedia di UI** (backend generik). Fee tier di UI masih default 0.25% (API menerima 1–100 bps). Spike pembanding Meteora/Orca (exit F4) tertunda |
 | F-F: swap in-app (Jupiter) | ✅ Selesai | Fee 0.30% (min 0.05) dipotong dari hasil swap saat job |
-| F-G: withdrawal USDC + OTP + audit | ✅ Selesai | Batas harian/whitelist = fase lanjut (sesuai §F-G) |
+| F-G: withdrawal USDC + OTP + audit | ✅ Selesai | OTP email butuh `RESEND_API_KEY` (dibatalkan) → kode tampil langsung di UI (**devCode**, mode MVP); batas harian/whitelist = fase lanjut |
 | F-H: explore, watchlist, komentar, statistik | ✅ Selesai | **Profil publik user** (per-user halaman) belum ada |
 | F-I: admin panel | ⚠️ Sebagian | Overview, pricing, daftar order, jobs, treasury ✅; **manual retry/refund, moderasi komentar, suspend, viewer audit log belum ada di UI** |
 | F-J: mode demo (devnet) & multi-wallet | ✅ Selesai | Multi-wallet mainnet + maks 1 wallet demo/user; create token & liquidity pool di devnet dibayar USDC devnet; deposit demo manual via faucet eksternal; WD/swap dinonaktifkan di mode demo; token/pool demo difilter dari explore/sitemap |
 | §7.2 ISR | ⚠️ Deviasi | Implementasi memakai SSR dinamis + cache market 15 detik (ISR tidak dipakai) |
 | §5.1 state machine | ⚠️ Deviasi | Tidak ada status `draft`; ada `cancelled`; swap tanpa bayar di muka (lihat §5.1 yang diperbarui) |
-| Exit criteria on-chain (F1/F2/F4/F5) | ⛔ Belum dijalankan | Butuh project Supabase, secret treasury/RPC, dan jaringan devnet |
+| Exit criteria on-chain (F1/F2/F4/F5) | ⚠️ Sebagian | Smoke devnet F1/F2 lulus dari site live (16 Okt: token SMOKE + pool CPMM); spike pembanding DEX (F4) & F5 mainnet menyusul |

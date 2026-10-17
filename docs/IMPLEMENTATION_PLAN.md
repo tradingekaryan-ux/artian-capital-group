@@ -2,9 +2,9 @@
 
 | | |
 |---|---|
-| **Versi** | 1.1 |
-| **Tanggal** | 16 Oktober 2026 |
-| **Status** | Kode Fase F0–F6 selesai — `lint + typecheck + test + build` hijau; exit on-chain/devnet & deploy menyusul |
+| **Versi** | 1.2 |
+| **Tanggal** | 17 Oktober 2026 |
+| **Status** | **LIVE** di Cloudflare Workers (`npm run deploy:cf`); kode F0–F6+F-J selesai; CI hijau; smoke devnet lulus |
 | **Dokumen saudara** | `docs/PRD.md` (lihat §13 status & deviasi) |
 | **Estimasi total** | 8–10 minggu (1 developer full-time) |
 | **Biaya infrastruktur** | $0/bulan |
@@ -18,7 +18,7 @@
 | Framework | **Next.js 16.4 (App Router, Turbopack, React 19) + TypeScript** | SSR untuk SEO halaman token, API route terintegrasi; typecheck = `next typegen && tsc` (tipe route global `PageProps`/`RouteContext` butuh typegen) | Vite+Express (SEO susah), SvelteKit (ekosistem Solana lebih tipis); Next 15 (ketinggalan, konvensi berubah) |
 | UI | **Tailwind CSS v4** (CSS-first via `@tailwindcss/turbopack`, tanpa `tailwind.config.ts`) + komponen sendiri | Cepat, tanpa runtime berat, konsisten | MUI (bundle besar) |
 | i18n | **next-intl** | Rute ber-prefix `/id`, server-first, ringan | react-i18next (client-heavy) |
-| Hosting | **Cloudflare Pages + Workers (via `@opennextjs/cloudflare`)** | Tier gratis, **boleh dipakai komersial**, CDN global, WebSocket/polling cukup | **Vercel Hobby — ditolak: ToS melarang pemakaian komersial**; Netlify (boleh, tapi Cloudflare lebih murah di egress) |
+| Hosting | **Cloudflare Workers (via `@opennextjs/cloudflare`)** | Tier gratis, **boleh dipakai komersial**, CDN global, WebSocket/polling cukup | **Vercel Hobby — ditolak: ToS melarang pemakaian komersial**; Netlify (boleh, tapi Cloudflare lebih murah di egress) |
 | Database + Auth + Storage | **Supabase Free** (Postgres, Auth, Storage, RLS) | Semua kebutuhan inti dalam 1 layanan gratis: 500MB DB, 50k MAU, 1GB storage, 500k edge fn | Neon+Clerk (dua vendor), Firebase (vendor lock-in kuat) |
 | RPC Solana | **Helius Free** (10 RPS, 1M credit/bln) + fallback `api.mainnet-beta.solana.com` | DAS API & priority fee tersedia gratis | RPC publik saja (gampang kena 429) |
 | Token creation | **Metaplex umi** (`umi-bundle-defaults` + `mpl-token-metadata`) di atas `@solana/web3.js` + `@solana/spl-token` | Satu alur `createV1` (mint+metadata) + instruksi SPL; payer treasury, authority → wallet user | Instruksi legacy manual (kode lebih panjang, rawan salah urutan); Token-2022 metadata extension (kompatibilitas wallet/DEX lebih berisiko) |
@@ -40,7 +40,7 @@
 
 ```
                          ┌──────────────────────────────────────────┐
-  Browser (EN/ID)  ───▶  │  Next.js on Cloudflare Pages/Workers     │
+  Browser (EN/ID)  ───▶  │  Next.js on Cloudflare Workers            │
                          │  - SSR/ISR pages  - Route handlers (API) │
                          └───────┬──────────────────────┬───────────┘
                                  │                      │
@@ -86,8 +86,10 @@ artian-capital/
 │   ├── ci.yml                   # lint + test + typecheck + build (Node 22)
 │   └── worker.yml               # cron 1 menit: run-jobs (job on-chain + job siklis)
 ├── supabase/
-│   ├── migrations/              # 0001_init.sql (skema + RLS), 0002_storage.sql
+│   ├── migrations/              # 0001_init, 0002_storage, 0003_multi_wallets, 0004_audit_fixes (+ apply_all.sql)
 │   └── seed.sql
+├── scripts/
+│   └── cf-deploy.mjs            # wrapper deploy CF (re-exec Node 22 utk macOS < 13.5)
 ├── src/
 │   ├── app/
 │   │   ├── page.tsx             # redirect → /en
@@ -201,7 +203,7 @@ jobs(id bigserial, type, payload jsonb, status, attempts int default 0, run_at, 
 
 > Semua fase menghasilkan kode yang lolos `lint + typecheck + build`. Fase F1–F5 diuji di **devnet** terlebih dahulu (flag `SOLANA_CLUSTER=devnet`), mainnet setelah spike biaya.
 >
-> **Status aktual (16 Okt 2026):** kode F0–F6 sudah diimplementasikan dan CI hijau (`lint` · `test` 10 kasus · `typecheck` · `build`). Exit criteria yang menuntut infrastruktur nyata — devnet on-chain (F1, F2, F4, F5), spike pembanding DEX (F4), dan deploy — **belum dijalankan**. Urutan sisa: buat project Supabase → isi `.env` + secrets → migrasi SQL → smoke devnet → spike F4 → deploy Cloudflare Pages. Daftar gap per fitur ada di `docs/PRD.md` §13.
+> **Status aktual (17 Okt 2026):** kode F0–F6+F-J sudah diimplementasikan dan CI hijau (`lint` · `test` 24 kasus · `typecheck` · `build`). Project Supabase live (migrasi 0001–0004), smoke devnet on-chain **lulus** (token SMOKE + pool CPMM dari site live), dan site **LIVE** di Cloudflare Workers. Sisa: spike pembanding DEX (F4), fitur gap per fitur di `docs/PRD.md` §13.
 
 ### Fase 0 — Fondasi (minggu 1)
 - Repo, ESLint/Prettier, Tailwind, next-intl (`en`/`id`), design system dasar (button, input, card, badge, modal).
@@ -267,11 +269,12 @@ Definisi selesai per fase: **CI hijau + exit criteria fase terpenuhi** (exit on-
 ---
 
 ## 8. Deployment & Konfigurasi
-1. `supabase` project baru (free) → jalankan `supabase/migrations/*.sql` (atau via SQL editor) → salin URL + anon key + service role key.
-2. Cloudflare Pages → connect repo → build OpenNext (`open-next.config.ts`/`wrangler.toml` **menyusul** saat setup deploy pertama) → set env/secrets: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `WALLET_MASTER_KEY` (32 byte base64), `TREASURY_SECRET_KEY` (base58), `CRON_SECRET`, `HELIUS_API_KEY` (opsional), `JUPITER_API_KEY` (opsional), `NEXT_PUBLIC_SOLANA_CLUSTER`.
-3. GitHub Actions secrets: sama dengan poin 2 (lihat daftar di `.github/workflows/worker.yml` — worker dijalankan `npx tsx src/worker/run-jobs.ts` tiap menit).
-4. Custom domain (opsional) atau `*.pages.dev`.
-5. Checklist production: RLS aktif (cek `supabase_get_advisors`), CSP & security headers, rate limit, backup DB (pg_dump mingguan via cron), monitoring saldo treasury, smoke devnet → mainnet.
+1. Supabase project live `vysgkjqbmgbbowsxafok` → migrasi `0001_init` → `0002_storage` → `0003_multi_wallets` → `0004_audit_fixes_multiwallet` (atau `supabase/apply_all.sql` lewat MCP `apply_migration`) → URL + anon key + service role key di `.env`.
+2. **Deploy aktual (Cloudflare Workers, bukan Pages):** `CLOUDFLARE_API_TOKEN=… CLOUDFLARE_ACCOUNT_ID=32532cb4cb1b252afd68622061ab20c2 npm run deploy:cf` — wrapper `scripts/cf-deploy.mjs` (re-exec Node 22 utk macOS < 13.5) menjalankan `wrangler deploy`; `wrangler.jsonc` memuat `build.command: opennextjs-cloudflare build` sehingga build selalu dijalankan sebelum upload (mencegah deploy stale). Live: <https://artian-capital-group.trading-ekaryan.workers.dev>.
+3. **Worker secrets** (`wrangler secret put <NAME>`): `SUPABASE_SERVICE_ROLE_KEY`, `WALLET_MASTER_KEY`, `TREASURY_SECRET_KEY`, `CRON_SECRET`, `HELIUS_API_KEY`, `JUPITER_API_KEY`. Var `NEXT_PUBLIC_*` **inlined saat build** dari `.env` (tidak perlu secret). Opsional: `RESEND_API_KEY` (dibatalkan), `TREASURY_SECRET_KEY_DEMO` (fallback ke treasury utama).
+4. GitHub Actions secrets: sama dengan poin 3 (lihat daftar di `.github/workflows/worker.yml` — worker dijalankan `npx tsx src/worker/run-jobs.ts` tiap menit).
+5. Custom domain (opsional) — saat ini memakai `*.workers.dev`; zona/domain tidak wajib.
+6. Checklist production: RLS aktif (cek `supabase_get_advisors`), CSP & security headers, rate limit, backup DB (pg_dump mingguan via cron), monitoring saldo treasury, **leaked password protection** (Supabase Auth → Password), smoke devnet → mainnet (ganti `NEXT_PUBLIC_SOLANA_CLUSTER`).
 
 ---
 
