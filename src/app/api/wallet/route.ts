@@ -43,7 +43,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Akun ditangguhkan. Hubungi admin." }, { status: 403 });
   }
   const ip = clientIp(req);
-  if (!rateLimit(`wallet-create:${auth.user.id}`, 10, 3_600_000)) {
+  if (!(await rateLimit(`wallet-create:${auth.user.id}`, 10, 3_600_000))) {
     return NextResponse.json({ error: "Terlalu banyak permintaan." }, { status: 429 });
   }
 

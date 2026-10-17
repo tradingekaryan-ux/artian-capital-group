@@ -16,7 +16,7 @@ export async function POST(req: Request) {
   }
   const user = auth.user;
 
-  if (!rateLimit(`comment:${user.id}`, 3, 60_000)) {
+  if (!(await rateLimit(`comment:${user.id}`, 3, 60_000))) {
     return NextResponse.json({ error: "Terlalu cepat, tunggu sebentar." }, { status: 429 });
   }
 

@@ -118,7 +118,7 @@ export async function POST(req: Request) {
   const user = auth.user;
 
   const ip = clientIp(req);
-  if (!rateLimit(`order:${user.id}`, LIMITS.orderPerHour, 3_600_000)) {
+  if (!(await rateLimit(`order:${user.id}`, LIMITS.orderPerHour, 3_600_000))) {
     return NextResponse.json({ error: "Terlalu banyak permintaan, coba nanti." }, { status: 429 });
   }
 

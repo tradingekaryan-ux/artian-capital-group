@@ -23,10 +23,10 @@ export async function POST(req: Request) {
   const user = auth.user;
 
   const ip = clientIp(req);
-  if (!rateLimit(`withdraw:${user.id}`, LIMITS.withdrawPerHour, 3_600_000)) {
+  if (!(await rateLimit(`withdraw:${user.id}`, LIMITS.withdrawPerHour, 3_600_000))) {
     return NextResponse.json({ error: "Batas penarikan terlampaui, coba besok." }, { status: 429 });
   }
-  if (!rateLimit(`withdraw-ip:${ip}`, LIMITS.withdrawPerHour * 3, 3_600_000)) {
+  if (!(await rateLimit(`withdraw-ip:${ip}`, LIMITS.withdrawPerHour * 3, 3_600_000))) {
     return NextResponse.json({ error: "Terlalu banyak permintaan." }, { status: 429 });
   }
 

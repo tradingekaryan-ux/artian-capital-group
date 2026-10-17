@@ -1,31 +1,26 @@
-/** Rate limit sederhana in-memory (per instance). Cukup untuk MVP; di produksi
- * multi-instance pertimbangkan Upstash/DB-backed limiter. */
+/** Rate limit berbasis DB (tabel `rate_limit_events` + RPC `rate_limit_take`)
+ * — atomik & shared lintas isolate Cloudflare Workers (menggantikan limiter
+ * in-memory per-instance yang tidak efektif di multi-instance).
+ * Fail-open: bila DB tidak terjangkau, request diizinkan (tersimpan di log). */
 
-type Bucket = { count: number; resetAt: number };
-const buckets = new Map<string, Bucket>();
-let opsSinceSweep = 0;
+import { supabaseAdmin } from "@/lib/db/client";
 
-/** Buang bucket kedaluwarsa — cegah pertumbuhan memori tanpa batas. */
-function sweep(now: number): void {
-  for (const [key, b] of buckets) {
-    if (b.resetAt < now) buckets.delete(key);
-  }
-}
-
-export function rateLimit(key: string, limit: number, windowMs: number): boolean {
-  const now = Date.now();
-  // sweep ringan tiap ~1000 operasi
-  if (++opsSinceSweep >= 1000) {
-    opsSinceSweep = 0;
-    sweep(now);
-  }
-  const b = buckets.get(key);
-  if (!b || b.resetAt < now) {
-    buckets.set(key, { count: 1, resetAt: now + windowMs });
+export async function rateLimit(
+  key: string,
+  limit: number,
+  windowMs: number,
+): Promise<boolean> {
+  try {
+    const { data, error } = await supabaseAdmin().rpc("rate_limit_take", {
+      p_key: key,
+      p_window_ms: windowMs,
+    });
+    if (error) throw error;
+    return (data as number) <= limit;
+  } catch (e) {
+    console.error("[rateLimit] gagal (fail-open):", e);
     return true;
   }
-  b.count += 1;
-  return b.count <= limit;
 }
 
 export function clientIp(req: Request): string {

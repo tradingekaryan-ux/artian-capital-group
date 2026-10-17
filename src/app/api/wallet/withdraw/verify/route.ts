@@ -20,7 +20,7 @@ export async function POST(req: Request) {
   const user = auth.user;
 
   const ip = clientIp(req);
-  if (!rateLimit(`withdraw-verify:${user.id}`, 10, 3_600_000)) {
+  if (!(await rateLimit(`withdraw-verify:${user.id}`, 10, 3_600_000))) {
     return NextResponse.json({ error: "Terlalu banyak percobaan." }, { status: 429 });
   }
 

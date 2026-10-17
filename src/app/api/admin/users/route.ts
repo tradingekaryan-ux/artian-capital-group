@@ -160,7 +160,7 @@ export async function GET(req: Request) {
 export async function PATCH(req: Request) {
   const admin = await requireAdmin();
   if (!admin) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-  if (!rateLimit(`admin-patch:${admin.id}`, 60, 60_000)) {
+  if (!(await rateLimit(`admin-patch:${admin.id}`, 60, 60_000))) {
     return NextResponse.json({ error: "Terlalu banyak permintaan." }, { status: 429 });
   }
 
