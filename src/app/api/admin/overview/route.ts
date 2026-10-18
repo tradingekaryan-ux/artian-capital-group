@@ -5,10 +5,16 @@ import { getPricing } from "@/lib/payment/pricing";
 import { rpcRead } from "@/lib/solana/connection";
 import { getTreasury } from "@/lib/chain/usdc";
 import { LAMPORTS_PER_SOL } from "@/lib/config";
+import { rateLimit } from "@/lib/security/ratelimit";
 
 export async function GET() {
   const admin = await requireAdmin();
   if (!admin) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+
+  // M-7: rate limit — maks 60x/menit per admin
+  if (!(await rateLimit(`admin-overview:${admin.id}`, 60, 60_000))) {
+    return NextResponse.json({ error: "Too many requests." }, { status: 429 });
+  }
 
   try {
     const db = supabaseAdmin();
@@ -55,8 +61,9 @@ export async function GET() {
         usdc: usdcBal ? Number(usdcBal.value.uiAmountString ?? 0) : 0,
         address: t.publicKey.toBase58(),
       };
-    } catch {
-      /* TREASURY_SECRET_KEY belum di-set — tampilkan nol */
+    } catch (e) {
+      /* TREASURY_SECRET_KEY belum di-set atau RPC gagal — tampilkan nol */
+      console.error("[treasury] overview fetch failed:", e);
     }
 
     return NextResponse.json({

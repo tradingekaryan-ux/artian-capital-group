@@ -27,6 +27,7 @@ export async function POST(req: Request) {
   const res = NextResponse.json({ activeId: wallet.id, kind: wallet.kind });
   res.cookies.set(ACTIVE_WALLET_COOKIE, wallet.id, {
     httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
     sameSite: "lax",
     path: "/",
     maxAge: 60 * 60 * 24 * 365,

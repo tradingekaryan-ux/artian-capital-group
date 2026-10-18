@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { z } from "zod";
 import { requireAdmin } from "@/lib/admin";
 import { getTreasury } from "@/lib/chain/usdc";
 import { rpcRead } from "@/lib/solana/connection";
@@ -7,6 +8,15 @@ import { PublicKey } from "@solana/web3.js";
 import { getAssociatedTokenAddressSync } from "@solana/spl-token";
 import { audit } from "@/lib/security/audit";
 import { rateLimit } from "@/lib/security/ratelimit";
+
+/** Batas penarikan treasury per transaksi (50,000 USDC). */
+const MAX_TREASURY_WITHDRAWAL_USDC = 50_000;
+
+const withdrawSchema = z.object({
+  action: z.literal("withdraw_usdc"),
+  toAddress: z.string().min(32).max(64),
+  amountUsdc: z.number().positive().max(MAX_TREASURY_WITHDRAWAL_USDC),
+});
 
 /**
  * GET /api/admin/treasury
@@ -41,13 +51,13 @@ export async function GET() {
  * POST /api/admin/treasury
  * body: { action: "withdraw_usdc", toAddress: string, amountUsdc: number }
  * Kirim USDC dari treasury ke alamat tujuan.
- * (Untuk keperluan admin: tarik dana dari treasury ke wallet eksternal.)
+ * Rate limit: 5x/menit, fail-closed (saat DB down, request DITOLAK).
  */
 export async function POST(req: Request) {
   const admin = await requireAdmin();
   if (!admin) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
-  if (!(await rateLimit(`admin-treasury:${admin.id}`, 5, 60_000))) {
+  if (!(await rateLimit(`admin-treasury:${admin.id}`, 5, 60_000, { failOpen: false }))) {
     return NextResponse.json({ error: "Too many requests." }, { status: 429 });
   }
 
@@ -58,19 +68,26 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Invalid request body" }, { status: 400 });
   }
 
-  const body = json as { action?: string; toAddress?: string; amountUsdc?: number };
-  if (body.action !== "withdraw_usdc") {
-    return NextResponse.json({ error: "Unknown action" }, { status: 400 });
+  const parsed = withdrawSchema.safeParse(json);
+  if (!parsed.success) {
+    const msg = parsed.error.issues[0]?.message ?? "Validation failed";
+    return NextResponse.json({ error: msg }, { status: 400 });
   }
-  if (!body.toAddress || !body.amountUsdc || body.amountUsdc <= 0) {
-    return NextResponse.json({ error: "toAddress and amountUsdc are required" }, { status: 400 });
+
+  const { toAddress, amountUsdc } = parsed.data;
+
+  // Validasi Solana public key runtime (Zod hanya cek string length)
+  let toPublicKey: PublicKey;
+  try {
+    toPublicKey = new PublicKey(toAddress);
+  } catch {
+    return NextResponse.json({ error: "toAddress is not a valid Solana public key" }, { status: 400 });
   }
 
   try {
     const { sendUsdcTransfer } = await import("@/lib/chain/usdc");
     const t = getTreasury("mainnet");
-    const toPublicKey = new PublicKey(body.toAddress);
-    const amountRaw = BigInt(Math.round(body.amountUsdc * 1_000_000));
+    const amountRaw = BigInt(Math.round(amountUsdc * 1_000_000));
 
     const sig = await sendUsdcTransfer({
       from: t,
@@ -83,12 +100,12 @@ export async function POST(req: Request) {
     await audit({
       actor: admin.id,
       action: "treasury_withdraw",
-      target: body.toAddress,
-      payload: { amountUsdc: body.amountUsdc, sig },
-      ip: req.headers.get("x-forwarded-for") ?? "unknown",
+      target: toAddress,
+      payload: { amountUsdc, sig },
+      ip: req.headers.get("cf-connecting-ip") ?? req.headers.get("x-forwarded-for") ?? "unknown",
     });
 
-    return NextResponse.json({ ok: true, sig, amountUsdc: body.amountUsdc });
+    return NextResponse.json({ ok: true, sig, amountUsdc });
   } catch (e) {
     console.error("[treasury] withdraw failed:", e);
     return NextResponse.json({ error: "Withdrawal failed" }, { status: 500 });

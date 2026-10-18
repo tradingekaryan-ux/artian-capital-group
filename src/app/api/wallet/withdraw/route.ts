@@ -23,10 +23,10 @@ export async function POST(req: Request) {
   const user = auth.user;
 
   const ip = clientIp(req);
-  if (!(await rateLimit(`withdraw:${user.id}`, LIMITS.withdrawPerHour, 3_600_000))) {
+  if (!(await rateLimit(`withdraw:${user.id}`, LIMITS.withdrawPerHour, 3_600_000, { failOpen: false }))) {
     return NextResponse.json({ error: "Daily withdrawal limit reached, try again tomorrow." }, { status: 429 });
   }
-  if (!(await rateLimit(`withdraw-ip:${ip}`, LIMITS.withdrawPerHour * 3, 3_600_000))) {
+  if (!(await rateLimit(`withdraw-ip:${ip}`, LIMITS.withdrawPerHour * 3, 3_600_000, { failOpen: false }))) {
     return NextResponse.json({ error: "Too many requests." }, { status: 429 });
   }
 

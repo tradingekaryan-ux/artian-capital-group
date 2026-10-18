@@ -1,11 +1,13 @@
 import { NextResponse } from "next/server";
-import { requireUser } from "@/lib/db/client";
+import { requireActiveUser } from "@/lib/db/client";
 import { getActiveWallet, readOnChainBalances, getCachedBalance } from "@/lib/solana/wallet";
 
 /** Saldo on-chain terkini (USDC + SOL) untuk wallet aktif user login. */
 export async function GET() {
-  const user = await requireUser();
-  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const auth = await requireActiveUser();
+  if (!auth) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (auth.suspended) return NextResponse.json({ error: "Your account is suspended." }, { status: 403 });
+  const user = auth.user;
   try {
     const wallet = await getActiveWallet(user.id);
     try {

@@ -24,6 +24,17 @@ export async function POST(req: Request) {
   if (!parsed.success) return NextResponse.json({ error: "Validation failed" }, { status: 400 });
 
   const db = supabaseAdmin();
+
+  // M-5: validasi token terdaftar di DB — mencegah watchlist dengan mint arbitrary
+  const { data: tokenExists } = await db
+    .from("tokens")
+    .select("mint")
+    .eq("mint", parsed.data.mint)
+    .maybeSingle();
+  if (!tokenExists) {
+    return NextResponse.json({ error: "Token not found" }, { status: 404 });
+  }
+
   const { data: existing } = await db
     .from("watchlists")
     .select("mint")

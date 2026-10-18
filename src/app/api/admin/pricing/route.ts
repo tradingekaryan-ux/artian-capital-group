@@ -3,6 +3,7 @@ import { z } from "zod";
 import { requireAdmin } from "@/lib/admin";
 import { supabaseAdmin } from "@/lib/db/client";
 import { audit } from "@/lib/security/audit";
+import { rateLimit } from "@/lib/security/ratelimit";
 import { pricingValueSchema } from "@/lib/payment/pricing";
 
 const bodySchema = z.object({
@@ -20,6 +21,11 @@ const bodySchema = z.object({
 export async function PATCH(req: Request) {
   const admin = await requireAdmin();
   if (!admin) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+
+  // H-5: rate limit pricing changes — maks 10x/menit per admin
+  if (!(await rateLimit(`admin-pricing:${admin.id}`, 10, 60_000))) {
+    return NextResponse.json({ error: "Too many requests." }, { status: 429 });
+  }
 
   let json: unknown;
   try {

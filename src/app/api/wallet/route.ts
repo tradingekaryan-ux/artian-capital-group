@@ -82,6 +82,7 @@ export async function POST(req: Request) {
     });
     res.cookies.set("wid", wallet.id, {
       httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
       sameSite: "lax",
       path: "/",
       maxAge: 60 * 60 * 24 * 365,

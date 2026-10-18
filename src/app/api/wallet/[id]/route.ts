@@ -44,6 +44,7 @@ export async function DELETE(
     const res = NextResponse.json({ ok: true, archivedId: archived.id });
     res.cookies.set(ACTIVE_WALLET_COOKIE, "", {
       httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
       sameSite: "lax",
       path: "/",
       maxAge: 0,

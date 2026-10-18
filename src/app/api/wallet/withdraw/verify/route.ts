@@ -20,8 +20,10 @@ export async function POST(req: Request) {
   const user = auth.user;
 
   const ip = clientIp(req);
-  if (!(await rateLimit(`withdraw-verify:${user.id}`, 10, 3_600_000))) {
-    return NextResponse.json({ error: "Too many attempts." }, { status: 429 });
+  // M-2: rate limit ketat untuk OTP — maks 5 percobaan per 10 menit (TTL OTP = 10 menit).
+  // fail-closed: saat DB down, tolak request (OTP brute force tidak boleh lolos).
+  if (!(await rateLimit(`withdraw-verify:${user.id}`, 5, 600_000, { failOpen: false }))) {
+    return NextResponse.json({ error: "Too many attempts. Request a new code." }, { status: 429 });
   }
 
   let json: unknown;

@@ -44,8 +44,10 @@ export async function createWithdrawOtp(
       console.error("[otp] send email failed:", e);
     }
   }
-  // Devnet MVP: tanpa Resend, kode dibagikan langsung ke UI agar alur tetap jalan.
-  const devCode = SECRETS.resendApiKey ? undefined : code;
+  // Dev only: tanpa Resend key, kode dikembalikan ke UI agar alur tetap bisa diuji.
+  // PRODUCTION: devCode TIDAK pernah dikembalikan — wajib set RESEND_API_KEY.
+  const isProd = process.env.NODE_ENV === "production";
+  const devCode = !isProd && !SECRETS.resendApiKey ? code : undefined;
   return { devCode };
 }
 

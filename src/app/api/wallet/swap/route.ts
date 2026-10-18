@@ -24,7 +24,7 @@ export async function POST(req: Request) {
   const user = auth.user;
 
   const ip = clientIp(req);
-  if (!(await rateLimit(`swap:${user.id}`, LIMITS.orderPerHour, 3_600_000))) {
+  if (!(await rateLimit(`swap:${user.id}`, LIMITS.orderPerHour, 3_600_000, { failOpen: false }))) {
     return NextResponse.json({ error: "Too many requests." }, { status: 429 });
   }
 

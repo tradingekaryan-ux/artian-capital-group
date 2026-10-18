@@ -18,6 +18,11 @@ export async function GET(req: Request) {
   const admin = await requireAdmin();
   if (!admin) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
+  // M-4: rate limit — maks 120x/menit per admin (mencegah data scraping)
+  if (!(await rateLimit(`admin-users-read:${admin.id}`, 120, 60_000))) {
+    return NextResponse.json({ error: "Too many requests." }, { status: 429 });
+  }
+
   try {
     const url = new URL(req.url);
     const id = url.searchParams.get("id");
