@@ -116,7 +116,7 @@ function FeatureBlock({
   actions: React.ReactNode;
 }) {
   return (
-    <div className="card overflow-hidden">
+    <div className="card flex flex-col overflow-hidden">
       <div className="chrome">
         <span className="chrome-dots">
           <span />
@@ -125,7 +125,7 @@ function FeatureBlock({
         </span>
         <span className="text-muted-ink">{index}</span>
       </div>
-      <div className="flex h-full flex-col gap-4 p-6">
+      <div className="flex flex-1 flex-col gap-4 p-6">
         <div>
           <h3 className="display text-2xl">{title}</h3>
           <p className="mt-3 text-sm leading-relaxed text-muted-ink">{body}</p>
