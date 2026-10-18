@@ -30,6 +30,9 @@ export function Footer() {
           <Link href="/events" className="text-white hover:text-[#d8ff3e]">
             Events
           </Link>
+          <Link href="/faq" className="text-white hover:text-[#d8ff3e]">
+            FAQ
+          </Link>
         </div>
       </div>
     </footer>

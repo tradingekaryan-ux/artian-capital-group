@@ -65,6 +65,14 @@ export function Nav() {
             >
               {t("events")}
             </Link>
+            <Link
+              href="/faq"
+              className={`rounded-full border-2 border-transparent px-3 py-1 transition-colors hover:border-[#d8ff3e] hover:text-[#d8ff3e] ${
+                pathname === "/faq" ? "border-[#d8ff3e] text-[#d8ff3e]" : ""
+              }`}
+            >
+              {t("faq")}
+            </Link>
           </nav>
         </div>
         <div className="flex items-center gap-2 text-sm">
