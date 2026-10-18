@@ -1,10 +1,12 @@
 const TICKS = [
-  "Launch your token on Solana",
+  "Token launches",
+  "Algo marketplace",
+  "Crypto signal algos · auto-forward",
+  "Events & giveaways on X",
   "Zero infra fees",
   "Pay in USDC · withdraw anytime",
   "Live market data",
   "Built for creators",
-  "Liquidity pools in one click",
 ] as const;
 
 export function Ticker() {

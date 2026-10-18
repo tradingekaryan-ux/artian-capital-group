@@ -20,11 +20,11 @@ export default async function LandingPage({ params }: PageProps<"/[locale]">) {
           Solana · USDC · zero infra fees
         </p>
         <h1 className="mx-auto max-w-4xl text-4xl leading-[0.95] sm:text-6xl lg:text-7xl">
-          <span className="hl">Launch tokens,</span>
+          <span className="hl">One platform for</span>
           <br />
-          <span className="hl hl-lime">trade smarter with algos</span>
+          <span className="hl hl-lime">modern finance</span>
           <br />
-          <span className="hl">on Solana</span>
+          <span className="hl">tokens, algos &amp; futures</span>
         </h1>
         <p className="mx-auto mt-7 max-w-2xl text-base font-medium text-white/90 sm:text-lg">
           {t("heroSubtitle")}

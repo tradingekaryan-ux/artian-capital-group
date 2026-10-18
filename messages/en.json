@@ -30,7 +30,7 @@
     "disclaimer": "Artian is a tooling platform, not an investment advisor. Crypto tokens are high risk and on-chain transactions are irreversible."
   },
   "landing": {
-    "heroSubtitle": "Two ways to start on Solana: launch your own token with liquidity in minutes, or subscribe to signal algos and forward them to your community. Pay in USDC — no infrastructure fees.",
+    "heroSubtitle": "A finance hub for builders and traders: launch your own token with liquidity in minutes, subscribe to crypto signal algos and forward them to your community, and follow live market data for the instruments you care about. Pay in USDC — no infrastructure fees.",
     "ctaCreate": "Create a token",
     "statTokens": "Tokens launched",
     "statUsers": "Creators",

@@ -27,7 +27,7 @@ export async function generateMetadata(): Promise<Metadata> {
     metadataBase: new URL(SITE.url),
     title: { default: SITE.name, template: `%s · ${SITE.name}` },
     description:
-      "Create and launch your Solana token with liquidity pool and live market data — all in one place. Pay in USDC, withdraw anytime.",
+      "A finance platform for token launches, crypto algo trading and the markets you follow — create a Solana token with a liquidity pool, subscribe to signal algos, and track live market data. Pay in USDC, withdraw anytime.",
   };
 }
 

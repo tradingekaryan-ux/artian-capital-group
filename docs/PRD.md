@@ -196,7 +196,7 @@ Tujuan: siapa pun dapat **menerbitkan algo** (sinyal via webhook) — gratis ata
 Tujuan: admin memposting **link pengumuman/komunitas** (post X/Twitter atau URL apa pun + caption) yang tampil publik sebagai **kartu preview website**; beranda difokuskan sebagai halaman pengenalan dua fitur utama.
 
 - **Event Tracker** (`/events`): admin POST URL + caption (guard SSRF, rate limit30/jam, audit `event_created|event_deleted`); meta card diambil server-side saat posting — URL X/Twitter via **oEmbed** (`publish.twitter.com`), URL lain via **og:title/og:description/og:image** (timeout4s, fallback kartu host); disimpan di kolom `meta jsonb`. Kartu: thumbnail + badge (Post on X / Link) + judul + deskripsi + host, membuka link di tab baru; admin dapat tombol Hapus (confirm). Publik hanya bisa melihat.
-- **Landing** (`/`): hero baru ("Launch tokens, trade smarter with algos on Solana") + stats + **2 blok fitur** — Token Launcher & Algo Marketplace (body + bullets + CTA `Create Token`/`Explore` dan `Browse algos`/`Publish your algo`).
+- **Landing** (`/`): hero framing industri finance ("One platform for modern finance — tokens, algos & futures") + stats + **2 blok fitur** — Token Launcher & Algo Marketplace (body + bullets + CTA `Create Token`/`Explore` dan `Browse algos`/`Publish your algo`); subtitle & ticker menonjolkan algo marketplace + **event/giveaway tracker di X** (bukan hanya token Solana); meta description ikut framing finance.
 - **Navigasi utama (urut)**: `Algos | Create Token | Explore Token | Event Tracker`; footer menambah Algos & Events.
 
 ---
