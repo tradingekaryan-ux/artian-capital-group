@@ -172,10 +172,11 @@ export async function archiveWallet(userId: string, walletId: string): Promise<W
     .maybeSingle();
   if (!row) throw new Error("Wallet not found");
   if ((row as WalletRow).archived_at) throw new Error("Already archived");
-  // Wallet aktif (cookie `wid` browser ini) tidak boleh diarsipkan.
-  const { cookies } = await import("next/headers");
-  const store = await cookies();
-  if (store.get(ACTIVE_WALLET_COOKIE)?.value === walletId) {
+  // Wallet AKTIF tidak boleh diarsipkan. Resolusi aktif = getActiveWallet()
+  // (cookie `wid` bila valid, selain itu mainnet pertama) — cek langsung di
+  // sini karena cookie bisa absen (fallback aktif ≠ "cookie === walletId").
+  const active = await getActiveWallet(userId);
+  if (active.id === walletId) {
     throw new Error("Cannot archive the active wallet — switch to another wallet first.");
   }
   const { data: updated, error } = await db
