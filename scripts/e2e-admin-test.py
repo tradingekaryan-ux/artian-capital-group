@@ -180,5 +180,65 @@ if w_usdc >= 0.05 and w_sol >= 0.012:
 else:
     print(f"SKIP  micro-transfer (wallet admin: {w_usdc} USDC / {w_sol} SOL; butuh ≥0.05 USDC & ≥0.012 SOL)")
 
+# ── 6. operasi admin atas dompet user + hapus algo + purge ─────
+import uuid
+
+st, body = http(f"{BASE}/api/admin/users/{ADMIN}/wallet", "POST",
+                {"action": "topup", "asset": "usdc", "amount": "1"})
+check("user-wallet tanpa sesi → 403", 403, st)
+
+st, body = http(f"{BASE}/api/admin/users/{ADMIN}/wallet", "POST",
+                {"action": "bogus", "asset": "usdc", "amount": "1"}, H)
+check("topup action invalid → 400", 400, st)
+
+st, body = http(f"{BASE}/api/admin/users/{ADMIN}/wallet", "POST",
+                {"action": "topup", "asset": "usdc", "amount": "0"}, H)
+check("topup amount 0 → 400", 400, st)
+
+st, body = http(f"{BASE}/api/admin/users/{ADMIN}/wallet", "POST",
+                {"action": "topup", "asset": "usdc", "amount": "999999"}, H)
+check("topup melebihi batas → 400", 400, st)
+
+st, body = http(f"{BASE}/api/admin/users/{ADMIN}/wallet", "POST",
+                {"action": "topup", "asset": "usdc", "amount": "1", "walletId": str(uuid.uuid4())}, H)
+check("topup walletId asing → 404", 404, st)
+
+st, body = http(f"{BASE}/api/admin/users/{ADMIN}/wallet", "DELETE", None, H)
+check("DELETE wallet tanpa walletId → 400", 400, st)
+
+st, body = http(f"{BASE}/api/admin/users/{ADMIN}/wallet?walletId=bukan-uuid", "DELETE", None, H)
+check("DELETE walletId non-uuid → 400", 400, st)
+
+st, body = http(f"{BASE}/api/admin/users/{ADMIN}/wallet?walletId=" + str(uuid.uuid4()), "DELETE", None, H)
+check("DELETE dompet tak ada → 404", 404, st)
+
+st, body = http(f"{BASE}/api/admin/users?id={ADMIN}", "GET", None, H)
+j2 = json.loads(body) if st == 200 else {}
+check("detail user memuat array algos", True, st == 200 and isinstance(j2.get("algos"), list))
+print(f"       algos milik admin: {len(j2.get('algos') or [])}")
+
+st, body = http(f"{BASE}/api/algos/{uuid.uuid4()}", "DELETE", None, H)
+check("DELETE algo tak ada → 404", 404, st)
+
+st, body = http(f"{BASE}/api/algos/{uuid.uuid4()}", "DELETE")
+check("DELETE algo tanpa sesi → 403", 403, st)
+
+# purge harian00:00 WITA — dipaksa via ?purge=true + CRON_SECRET
+CRON = grab(r"\| `CRON_SECRET` \| set \| `([^`]+)`")
+st, body = http(f"{BASE}/api/cron/run-jobs?purge=true&limit=1", "POST", None,
+                {"Authorization": f"Bearer {CRON}"})
+j2 = json.loads(body) if st == 200 else {}
+pg = j2.get("purge") or {}
+check("cron purge=true → 200 + ringkasan", True, st == 200 and isinstance(pg, dict))
+print(f"       purge: jobs={pg.get('jobsDeleted')} snapshots={pg.get('snapshotsDeleted')}")
+
+st, body = http(f"{URL}/rest/v1/jobs?status=in.(done,failed)&select=id", "GET", None,
+                {"apikey": SR, "Authorization": f"Bearer {SR}"})
+rows = json.loads(body) if st == 200 else ["err"]
+check("jobs done/failed habis setelah purge", 0, len(rows))
+
+st, body = http(f"{BASE}/api/cron/run-jobs?purge=true", "POST")
+check("purge tanpa CRON_SECRET → 401", 401, st)
+
 print(f"\n=== {sum(results)}/{len(results)} PASS ===")
 sys.exit(0 if all(results) else 1)

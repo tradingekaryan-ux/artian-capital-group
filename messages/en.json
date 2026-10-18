@@ -330,7 +330,22 @@
     "confirmTreasuryWithdraw": "Withdraw {amount} {asset} from treasury to your active wallet?",
     "algoCommission": "Algo commission (USDC per paid subscription)",
     "algoCommissionHint": "Flat USDC taken from every paid algo subscription: creator receives price − commission, treasury receives commission.",
-    "save": "Save"
+    "save": "Save",
+    "walletOps": "Wallet ops — top up / withdraw",
+    "walletOpsWallet": "Wallet",
+    "walletTopup": "Top up",
+    "walletWithdraw": "Withdraw",
+    "confirmTopup": "Top up {amount} {asset} to this wallet from your active wallet? (You pay the gas.)",
+    "confirmWithdraw": "Withdraw {amount} {asset} from this wallet to your active wallet? (You pay the gas.)",
+    "walletOpSent": "Sent — tx {sig}… (on-chain confirmed)",
+    "noMainnetWallet": "This user has no mainnet wallet.",
+    "deleteWallet": "Delete",
+    "confirmDeleteWallet": "Permanently DELETE wallet {addr}? Irreversible — private key destroyed. Sweep funds first (USDC must be 0, SOL below 0.001).",
+    "walletDeleted": "Wallet deleted.",
+    "userAlgos": "Algos",
+    "deleteAlgo": "Delete",
+    "confirmDeleteAlgo": "Permanently delete algo “{name}” and all its data (hooks, messages, subscriptions, slots)?",
+    "algoDeleted": "Algo deleted."
   },
   "fees": {
     "title": "How fees work",

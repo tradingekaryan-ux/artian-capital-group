@@ -211,6 +211,8 @@ events(id uuid pk, url text, caption text, meta jsonb default '{}',
 | `GET /api/admin/overview` | stats orders/jobs/treasury untuk panel admin | role admin |
 | `GET/POST /api/admin/treasury` | GET: saldo on-chain treasury + wallet aktif admin. POST: `{action:"deposit"\|"withdraw", asset:"usdc"\|"sol", amount:string}` — transfer antara wallet aktif admin (mainnet) ↔ treasury; tujuan di-hardcode server; pre-check saldo + buffer gas; cap 50k USDC / 1k SOL; rate limit 5×/menit fail-closed; audit | role admin |
 | `PATCH /api/admin/pricing` | ubah `pricing_config` (termasuk `algo_commission` = komisi flat USDC per langganan algo berbayar) | role admin |
+| `POST/DELETE /api/admin/users/[userId]/wallet` | **POST** `{action:"topup"\|"withdraw", asset:"usdc"\|"sol", amount, walletId?}` — transfer dompet user (mainnet) ↔ wallet aktif admin; **gas SELALU dibayar wallet admin** (feePayer; jadi withdraw USDC user tidak butuh SOL); cek saldo on-chain, cap 50k USDC/1k SOL, buffer gas 0.01 SOL, rate limit 5×/menit fail-closed, audit `admin_wallet_topup`/`admin_wallet_withdraw`. **DELETE** `?walletId=` — hapus permanen dompet user: mainnet wajib saldo hampir nol (USDC=0 & SOL<0.001, selain itu `409` — withdraw/sweep dulu); `balances_cache` (PK, tanpa FK) dihapus manual, FK lain (`orders`,`wallet_events`,…) `on delete set null`; audit `admin_wallet_deleted` | role admin |
+| `DELETE /api/algos/[id]` | hapus permanen algo (**hanya admin** — moderasi konten; cascade `algo_*`: hooks/messages/subscriptions/slots; creator sendiri cukup pause via PATCH `isActive`); audit `algo_deleted` | role admin |
 | `GET /api/algos` | daftar algo aktif (`?q=&page=`); `?mine=1` → milik sendiri incl. non-aktif | session opsional / session |
 | `POST /api/algos` | buat algo + 1 token hook default; harga > komisi; free → billing lifetime | session + rate limit |
 | `GET /api/algos/[id]` | detail + feed (`?after=<msgId>`) + mySub + counts; algo non-aktif hanya owner | publik / session opsional |
@@ -223,7 +225,7 @@ events(id uuid pk, url text, caption text, meta jsonb default '{}',
 | `GET /api/events` | daftar event publik (urut terbaru, limit100) | publik |
 | `POST /api/events` | admin posting URL + caption; meta card diambil server-side (oEmbed X / og-tags, timeout4s, SSRF guard) | role admin + rate limit |
 | `DELETE /api/events/[id]` | hapus event | role admin |
-| `POST /api/cron/run-jobs` | trigger manual worker (cadangan di luar GH Actions) | `Bearer CRON_SECRET` |
+| `POST /api/cron/run-jobs` | trigger manual worker (cadangan di luar GH Actions); **purge log otomatis** tiap 00:00 WITA (16:00 UTC, window 5 menit, marker anti-dobel) atau paksa `?purge=true` — hapus `jobs` done/failed + `price_snapshots` >30 hari (`src/lib/jobs/purge.ts`) | `Bearer CRON_SECRET` |
 
 **Catatan penting vs rencana awal:**
 - Autentikasi 100% via **Supabase Auth SDK di client** (login/register/verify) — tidak ada route `/api/auth/*`.
@@ -294,7 +296,7 @@ events(id uuid pk, url text, caption text, meta jsonb default '{}',
 | Unit (tertunda) | Vitest | enkripsi AES-GCM, state machine order, validasi input |
 | Integration (tertunda) | Vitest + mock RPC | token-create tx builder (assert instruksi), withdrawal flow |
 | E2E manual (tertunda) | `scripts/devnet-smoke.ts` | topup→create token→pool→swap→withdraw di devnet |
-| E2E live ✅ | `scripts/e2e-admin-test.py` + `scripts/e2e-algo-test.py` | sesi magiclink→cookie SSR: admin wallet/treasury (12 cek) & **algo marketplace** (50 cek) — lulus penuh di live; smoke terpisah **events+landing+nav 19/19** (hero/blok fitur baru, urut nav Algos→Create→Explore→Events, CRUD event admin + og-meta, SSRF/caption guard) |
+| E2E live ✅ | `scripts/e2e-admin-test.py` + `scripts/e2e-algo-test.py` | sesi magiclink→cookie SSR: admin wallet/treasury + **ops dompet user (topup/withdraw/hapus), hapus algo, purge cron** (26 cek) & **algo marketplace** (50 cek) — lulus penuh di live; smoke terpisah **events+landing+nav 19/19** (hero/blok fitur baru, urut nav Algos→Create→Explore→Events, CRUD event admin + og-meta, SSRF/caption guard) |
 | CI ✅ | GitHub Actions `ci.yml` | `lint`, `test`, `typecheck` (`next typegen && tsc`), `build` tiap push/PR — Node 22 |
 | Post-deploy | worker cron tiap menit | sentuh DB tiap menit (de facto heartbeat, PRD §10 R5) + jalankan job siklis `price_snapshot` |
 

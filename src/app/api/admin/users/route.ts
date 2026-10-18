@@ -41,6 +41,7 @@ export async function GET(req: Request) {
         { data: tokens },
         { data: orders },
         { data: withdrawals },
+        { data: algos },
       ] = await Promise.all([
         db.from("profiles").select("*").eq("user_id", id).maybeSingle(),
         db.from("wallets").select("id, public_key, kind, label, archived_at").eq("user_id", id).order("created_at", { ascending: true }),
@@ -68,6 +69,12 @@ export async function GET(req: Request) {
           .eq("user_id", id)
           .order("created_at", { ascending: false })
           .limit(20),
+        db
+          .from("algos")
+          .select("id, name, price_usdc, billing, is_active, created_at")
+          .eq("user_id", id)
+          .order("created_at", { ascending: false })
+          .limit(20),
       ]);
 
       // Dompet mainnet aktif (non-arsip) untuk display saldo.
@@ -91,6 +98,7 @@ export async function GET(req: Request) {
         tokens: tokens ?? [],
         orders: orders ?? [],
         withdrawals: withdrawals ?? [],
+        algos: algos ?? [],
         wallets: (wallets ?? []).map((w) => ({
           id: w.id,
           kind: w.kind,

@@ -6,6 +6,7 @@ import { rateLimit, clientIp } from "@/lib/security/ratelimit";
 import { uiToRaw } from "@/lib/payment/pricing";
 import { USDC_DECIMALS } from "@/lib/config";
 import { getAlgoCommissionRaw, getLatestSub, isSubActive, ALGO_FEED_PAGE, type AlgoRow } from "@/lib/algos";
+import { requireAdmin } from "@/lib/admin";
 
 /**
  * GET /api/algos/[id] — detail algo + feed message (paginated) + status
@@ -181,4 +182,44 @@ export async function PATCH(
     ip,
   });
   return NextResponse.json({ algo: updated as AlgoRow });
+}
+
+/**
+ * DELETE /api/algos/[id] — hapus permanen (HANYA admin; moderasi konten).
+ * Anak baris algo_* cascade (0008): hooks, messages, subscriptions, slots.
+ * Creator sendiri cukup pause (isActive=false) — hard delete milik admin.
+ */
+export async function DELETE(
+  req: Request,
+  { params }: { params: Promise<{ id: string }> },
+) {
+  const admin = await requireAdmin();
+  if (!admin) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  if (!(await rateLimit(`admin-algo-delete:${admin.id}`, 30, 60_000, { failOpen: false }))) {
+    return NextResponse.json({ error: "Too many requests." }, { status: 429 });
+  }
+  const { id } = await params;
+
+  const db = supabaseAdmin();
+  const { data: algo } = await db
+    .from("algos")
+    .select("id, user_id, name")
+    .eq("id", id)
+    .maybeSingle();
+  if (!algo) return NextResponse.json({ error: "Not found" }, { status: 404 });
+
+  const { error } = await db.from("algos").delete().eq("id", id);
+  if (error) {
+    console.error("[algos] admin delete failed:", error);
+    return NextResponse.json({ error: "Failed to delete algo" }, { status: 500 });
+  }
+
+  await audit({
+    actor: admin.id,
+    action: "algo_deleted",
+    target: id,
+    payload: { ownerId: (algo as { user_id: string }).user_id, name: (algo as { name: string }).name },
+    ip: clientIp(req),
+  });
+  return NextResponse.json({ ok: true });
 }

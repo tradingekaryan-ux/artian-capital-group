@@ -27,6 +27,7 @@ interface UserDetail {
   orders: { id: string; service: string; amount_raw: string; status: string; payment_signature: string | null; created_at: string }[];
   withdrawals: { id: string; amount_raw: string; fee_raw: string | null; status: string; tx_signature: string | null; fee_tx: string | null; created_at: string }[];
   wallets: { id: string; kind: string; label: string | null; public_key: string; archived_at: string | null }[];
+  algos?: { id: string; name: string; price_usdc: string | number; billing: string; is_active: boolean; created_at: string }[];
 }
 
 const rawToUsdc = (raw: string) => Number(raw ?? 0) / 1_000_000;
@@ -94,6 +95,17 @@ export function AdminUsersPanel({ initialQ = "" }: { initialQ?: string }) {
     } finally {
       setDetailBusy(false);
     }
+  }
+
+  /** Muat ulang detail user terbuka + daftar (setelah topup/hapus dsb.). */
+  async function refreshDetail(id: string) {
+    try {
+      const res = await fetch(`/api/admin/users?id=${id}`);
+      if (res.ok) setDetail(await res.json());
+    } catch {
+      /* biarkan tampilan lama bila gagal */
+    }
+    load(page);
   }
 
   const filtered = (users ?? []).filter((u) => {
@@ -201,6 +213,7 @@ export function AdminUsersPanel({ initialQ = "" }: { initialQ?: string }) {
                               detail={detail}
                               reindexBusy={busy === `reindex-${u.id}`}
                               onReindex={() => void patch({ userId: u.id, reindex: true }, `reindex-${u.id}`)}
+                              onRefresh={() => void refreshDetail(u.id)}
                             />
                           )}
                         </td>
@@ -221,13 +234,87 @@ function UserDetailView({
   detail,
   reindexBusy,
   onReindex,
+  onRefresh,
 }: {
   detail: UserDetail;
   reindexBusy: boolean;
   onReindex: () => void;
+  onRefresh: () => void;
 }) {
   const t = useTranslations("admin");
   const u = detail.user;
+  const [opsWalletId, setOpsWalletId] = useState("");
+  const [opsAsset, setOpsAsset] = useState<"usdc" | "sol">("usdc");
+  const [opsAmount, setOpsAmount] = useState("");
+  const [opsBusy, setOpsBusy] = useState<string | null>(null);
+  const [opsMsg, setOpsMsg] = useState<string | null>(null);
+
+  const mainnetWallets = detail.wallets.filter((w) => w.kind === "mainnet");
+  const defaultWallet = mainnetWallets.find((w) => !w.archived_at) ?? mainnetWallets[0];
+  const selectedWalletId = opsWalletId || defaultWallet?.id || "";
+
+  async function walletOp(action: "topup" | "withdraw") {
+    if (!selectedWalletId || !opsAmount) return;
+    const key = `${action}-${selectedWalletId}`;
+    const question =
+      action === "topup"
+        ? t("confirmTopup", { amount: opsAmount, asset: opsAsset.toUpperCase() })
+        : t("confirmWithdraw", { amount: opsAmount, asset: opsAsset.toUpperCase() });
+    if (!window.confirm(question)) return;
+    setOpsBusy(key);
+    setOpsMsg(null);
+    try {
+      const res = await fetch(`/api/admin/users/${u.id}/wallet`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action, asset: opsAsset, amount: opsAmount, walletId: selectedWalletId }),
+      });
+      const j = await res.json().catch(() => ({}) as Record<string, unknown>);
+      if (!res.ok) throw new Error(String(j.error ?? "ERR"));
+      setOpsMsg(t("walletOpSent", { sig: String(j.sig ?? "").slice(0, 12) }));
+      setOpsAmount("");
+      onRefresh();
+    } catch (e) {
+      setOpsMsg(e instanceof Error ? e.message : t("loadError"));
+    } finally {
+      setOpsBusy(null);
+    }
+  }
+
+  async function deleteWallet(walletId: string, addr: string) {
+    if (!window.confirm(t("confirmDeleteWallet", { addr }))) return;
+    setOpsBusy(`del-${walletId}`);
+    setOpsMsg(null);
+    try {
+      const res = await fetch(`/api/admin/users/${u.id}/wallet?walletId=${walletId}`, { method: "DELETE" });
+      const j = await res.json().catch(() => ({}) as Record<string, unknown>);
+      if (!res.ok) throw new Error(String(j.error ?? "ERR"));
+      setOpsMsg(t("walletDeleted"));
+      onRefresh();
+    } catch (e) {
+      setOpsMsg(e instanceof Error ? e.message : t("loadError"));
+    } finally {
+      setOpsBusy(null);
+    }
+  }
+
+  async function deleteAlgo(algoId: string, name: string) {
+    if (!window.confirm(t("confirmDeleteAlgo", { name }))) return;
+    setOpsBusy(`algo-${algoId}`);
+    setOpsMsg(null);
+    try {
+      const res = await fetch(`/api/algos/${algoId}`, { method: "DELETE" });
+      const j = await res.json().catch(() => ({}) as Record<string, unknown>);
+      if (!res.ok) throw new Error(String(j.error ?? "ERR"));
+      setOpsMsg(t("algoDeleted"));
+      onRefresh();
+    } catch (e) {
+      setOpsMsg(e instanceof Error ? e.message : t("loadError"));
+    } finally {
+      setOpsBusy(null);
+    }
+  }
+
   return (
     <div className="flex flex-col gap-4 text-sm">
       <div className="flex flex-wrap items-center gap-3">
@@ -239,7 +326,74 @@ function UserDetailView({
           {t("reindex")}
         </button>
       </div>
-      {/* Wallet list — semua (termasuk archived) */}
+
+      {/* ── Topup / withdraw dompet user (mitra = wallet aktif admin) ── */}
+      <div className="rounded border border-black/15 bg-white p-3">
+        <p className="mb-2 text-[10px] font-bold uppercase tracking-wide text-muted-ink">{t("walletOps")}</p>
+        {mainnetWallets.length ? (
+          <div className="flex flex-wrap items-end gap-2">
+            <label className="flex flex-col gap-1 text-[10px] font-bold uppercase tracking-wide text-muted-ink">
+              {t("walletOpsWallet")}
+              <select
+                className="input !py-1.5 text-xs"
+                value={selectedWalletId}
+                onChange={(e) => {
+                  setOpsWalletId(e.target.value);
+                  setOpsMsg(null);
+                }}
+              >
+                {mainnetWallets.map((w) => (
+                  <option key={w.id} value={w.id}>
+                    {shortAddress(w.public_key, 6)}
+                    {w.archived_at ? " · archived" : ""}
+                    {w.label ? ` · ${w.label}` : ""}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="flex flex-col gap-1 text-[10px] font-bold uppercase tracking-wide text-muted-ink">
+              {t("treasuryAsset")}
+              <select
+                className="input !py-1.5 text-xs"
+                value={opsAsset}
+                onChange={(e) => setOpsAsset(e.target.value === "sol" ? "sol" : "usdc")}
+              >
+                <option value="usdc">USDC</option>
+                <option value="sol">SOL</option>
+              </select>
+            </label>
+            <label className="flex flex-col gap-1 text-[10px] font-bold uppercase tracking-wide text-muted-ink">
+              {t("treasuryAmount")}
+              <input
+                className="input !py-1.5 text-xs"
+                inputMode="decimal"
+                placeholder="0.00"
+                value={opsAmount}
+                onChange={(e) => setOpsAmount(e.target.value)}
+              />
+            </label>
+            <button
+              className="btn btn-primary !px-3 !py-1.5 !text-[11px]"
+              disabled={!!opsBusy}
+              onClick={() => void walletOp("topup")}
+            >
+              {opsBusy === `topup-${selectedWalletId}` ? "…" : t("walletTopup")}
+            </button>
+            <button
+              className="btn btn-secondary !px-3 !py-1.5 !text-[11px]"
+              disabled={!!opsBusy}
+              onClick={() => void walletOp("withdraw")}
+            >
+              {opsBusy === `withdraw-${selectedWalletId}` ? "…" : t("walletWithdraw")}
+            </button>
+          </div>
+        ) : (
+          <p className="text-xs text-muted-ink">{t("noMainnetWallet")}</p>
+        )}
+        {opsMsg ? <p className="mt-2 break-all text-xs font-bold text-[#15803d]">{opsMsg}</p> : null}
+      </div>
+
+      {/* Wallet list — semua (termasuk archived) + hapus permanen */}
       {detail.wallets?.length ? (
         <div>
           <p className="mb-1 text-[10px] font-bold uppercase tracking-wide text-muted-ink">{t("walletsAll")}</p>
@@ -252,11 +406,51 @@ function UserDetailView({
                   <span className="rounded-full border border-black/20 bg-[#fee2e2] px-1.5 py-0.5 text-[10px] uppercase text-[#b91c1c]">{t("archived")}</span>
                 )}
                 {w.label && <span className="text-muted-ink">{w.label}</span>}
+                <button
+                  className="btn btn-danger ml-auto !px-2 !py-0.5 !text-[10px]"
+                  disabled={!!opsBusy}
+                  onClick={() => void deleteWallet(w.id, w.public_key)}
+                >
+                  {opsBusy === `del-${w.id}` ? "…" : t("deleteWallet")}
+                </button>
               </li>
             ))}
           </ul>
         </div>
       ) : null}
+
+      {/* Algo milik user — hapus permanen oleh admin */}
+      <div>
+        <p className="mb-1 text-[10px] font-bold uppercase tracking-wide text-muted-ink">{t("userAlgos")}</p>
+        {detail.algos?.length ? (
+          <ul className="flex flex-col gap-1">
+            {detail.algos.map((a) => (
+              <li key={a.id} className="flex items-center gap-2 text-xs">
+                <span className="font-bold">{a.name}</span>
+                <span className="mono text-muted-ink">
+                  {Number(a.price_usdc) === 0 ? "FREE" : `${a.price_usdc} USDC`} · {a.billing}
+                </span>
+                <span
+                  className={`rounded-full border border-black/20 px-1.5 py-0.5 text-[10px] uppercase ${
+                    a.is_active ? "bg-[#dcfce7] text-[#15803d]" : "bg-[#fee2e2] text-[#b91c1c]"
+                  }`}
+                >
+                  {a.is_active ? t("active") : "off"}
+                </span>
+                <button
+                  className="btn btn-danger ml-auto !px-2 !py-0.5 !text-[10px]"
+                  disabled={!!opsBusy}
+                  onClick={() => void deleteAlgo(a.id, a.name)}
+                >
+                  {opsBusy === `algo-${a.id}` ? "…" : t("deleteAlgo")}
+                </button>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="text-xs text-muted-ink">—</p>
+        )}
+      </div>
       <div className="grid gap-4 lg:grid-cols-3">
         <div>
           <p className="mb-1 text-[10px] font-bold uppercase tracking-wide text-muted-ink">{t("recentTokens")}</p>

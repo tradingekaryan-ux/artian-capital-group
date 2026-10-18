@@ -14,9 +14,26 @@ export async function POST(req: Request) {
 
   try {
     const { runPendingJobs } = await import("@/lib/jobs/runner");
-    const limit = Number(new URL(req.url).searchParams.get("limit") ?? 10);
+    const url = new URL(req.url);
+    const limit = Number(url.searchParams.get("limit") ?? 10);
     const result = await runPendingJobs(Math.min(Math.max(limit, 1), 25));
-    return NextResponse.json({ ok: true, ...result });
+
+    // Purge log harian: otomatis tiap 00:00 WITA (16:00 UTC, window5 menit),
+    // atau paksa via ?purge=true (ujian E2E). Lihat src/lib/jobs/purge.ts.
+    const now = new Date();
+    const inWindow = now.getUTCHours() === 16 && now.getUTCMinutes() < 5;
+    const force = url.searchParams.get("purge") === "true";
+    let purge: unknown = null;
+    if (force || inWindow) {
+      try {
+        const { purgeOldLogs } = await import("@/lib/jobs/purge");
+        purge = await purgeOldLogs({ force });
+      } catch (e) {
+        console.error("[cron] purge failed:", e);
+      }
+    }
+
+    return NextResponse.json({ ok: true, ...result, purge });
   } catch (e) {
     console.error("[cron] run-jobs failed:", e);
     return NextResponse.json({ ok: false, error: "Internal error" }, { status: 500 });
