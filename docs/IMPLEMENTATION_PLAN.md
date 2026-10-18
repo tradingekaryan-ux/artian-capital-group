@@ -2,10 +2,10 @@
 
 | | |
 |---|---|
-| **Versi** | 1.2 |
-| **Tanggal** | 17 Oktober 2026 |
-| **Status** | **LIVE** di Cloudflare Workers (`npm run deploy:cf`); kode F0–F6+F-J selesai; CI hijau; smoke devnet lulus |
-| **Dokumen saudara** | `docs/PRD.md` (lihat §13 status & deviasi) |
+| **Versi** | 1.3 |
+| **Tanggal** | 18 Oktober 2026 |
+| **Status** | **LIVE** di Cloudflare Workers (`npm run deploy:cf`); kode F0–F6 + F-J…F-P (burn, algo, events, admin ops, webhook, FAQ) selesai; migrasi 0001–0010; CI hijau; smoke devnet lulus; E2E live admin 46/46 · algo 50/50 · events 19/19 |
+| **Dokumen saudara** | `docs/PRD.md` (lihat §13 status & deviasi) · `README.md` · `SECRETS.md` (gitignored) |
 | **Estimasi total** | 8–10 minggu (1 developer full-time) |
 | **Biaya infrastruktur** | $0/bulan |
 
@@ -87,28 +87,32 @@ artian-capital/
 │   ├── ci.yml                   # lint + test + typecheck + build (Node 22)
 │   └── worker.yml               # cron 1 menit: run-jobs (job on-chain + job siklis)
 ├── supabase/
-│   ├── migrations/              # 0001_init, 0002_storage, 0003_multi_wallets, 0004_audit_fixes (+ apply_all.sql)
+│   ├── migrations/              # 0001_init … 0010_webhooks (0005 rate_limit, 0006 burn, 0007 wallet_archive,
+│   │                            # 0008 algo, 0009 events, 0010 webhooks) + apply_all.sql
 │   └── seed.sql
 ├── scripts/
 │   └── cf-deploy.mjs            # wrapper deploy CF (re-exec Node 22 utk macOS < 13.5)
 ├── src/
 │   ├── app/
 │   │   ├── page.tsx             # redirect → /en
-│   │   ├── [locale]/            # en (default) & id
+│   │   ├── icon.png             # favicon ARTIAN (PNG bulat transparan 512px)
+│   │   ├── [locale]/            # en = satu-satunya bahasa (URL tanpa prefix; /en & /id di-redirect)
 │   │   │   ├── page.tsx         # landing (statistik DB)
-│   │   │   ├── explore/  create/  token/[mint]/
+│   │   │   ├── explore/  create/  token/[mint]/  algos/  algos/[id]/  events/  faq/
 │   │   │   ├── login/  register/  verify/
-│   │   │   ├── dashboard/       # overview, wallet, orders, tokens (layout: ensureProfile+ensureWallet)
-│   │   │   └── admin/
+│   │   │   ├── dashboard/       # overview, wallet, orders, tokens, algos (layout: ensureProfile+ensureWallet)
+│   │   │   └── admin/           # overview, pricing, webhooks+discord, users (topup/withdraw/hapus), orders, jobs
 │   │   └── api/
 │   │       ├── orders/          # POST buat order, GET [id] (polling)
-│   │       ├── wallet/          # balance, swap, withdraw, withdraw/verify
+│   │       ├── wallet/          # balance, swap, withdraw, withdraw/verify, active, [id] (arsip)
 │   │       ├── community/       # comments, watchlist
-│   │       ├── admin/           # overview, pricing
-│   │       └── cron/run-jobs    # trigger manual (Bearer CRON_SECRET)
+│   │       ├── algos/  events/  discord
+│   │       ├── admin/           # overview, pricing, webhooks, treasury, users/[id]/wallet, jobs
+│   │       └── cron/run-jobs    # trigger manual (Bearer CRON_SECRET) + purge log 00:00 WITA
 │   ├── components/              # nav, footer, auth-form, verify-form, create/wizard,
 │   │                            # market/ (chart, watchlist-button), pools/pool-panel,
-│   │                            # wallet/ (withdraw-card, swap-card), community/, admin/panel
+│   │                            # wallet/ (withdraw-card, swap-card), community/, admin/panel,
+│   │                            # algos/ (algo-manager, algo-view), events/, DiscordButton
 │   ├── i18n/                    # routing, request, navigation (next-intl v4)
 │   ├── lib/
 │   │   ├── chain/               # token-create (umi), pool (Raydium CPMM), swap (Jupiter), usdc, assets
@@ -117,8 +121,8 @@ artian-capital/
 │   │   ├── solana/  db/  security/  market/
 │   │   ├── profiles.ts  admin.ts  analytics.ts  format.ts  config.ts
 │   ├── worker/run-jobs.ts       # entry GitHub Actions: claim job + enqueue job siklis
-├── messages/{en,id}.json
-├── next.config.ts               # plugin next-intl + aturan Tailwind v4
+├── messages/en.json            # English-only (messages/id.json dihapus 17 Okt)
+├── next.config.ts               # plugin next-intl + Tailwind v4 + security headers/CSP + redirect/rewrite URL tanpa prefix
 ├── README.md  .env.example
 └── package.json                 # lint / test / typecheck / build / worker
 ```
@@ -211,7 +215,7 @@ events(id uuid pk, url text, caption text, meta jsonb default '{}',
 | `GET /api/admin/overview` | stats orders/jobs/treasury untuk panel admin | role admin |
 | `GET/POST /api/admin/treasury` | GET: saldo on-chain treasury + wallet aktif admin. POST: `{action:"deposit"\|"withdraw", asset:"usdc"\|"sol", amount:string}` — transfer antara wallet aktif admin (mainnet) ↔ treasury; tujuan di-hardcode server; pre-check saldo + buffer gas; cap 50k USDC / 1k SOL; rate limit 5×/menit fail-closed; audit | role admin |
 | `PATCH /api/admin/pricing` | ubah `pricing_config` (termasuk `algo_commission` = komisi flat USDC per langganan algo berbayar) | role admin |
-| `GET/PATCH /api/admin/webhooks` | **5 slot URL webhook alert terpisah** (key `webhook_events|tx|wallet|algo`|`user` di `pricing_config`, value `{url}`): GET = semua URL ("" = off); PATCH `{slot,url}` — `url:""` = bersihkan; validasi `assertSafeDestUrl` (http/https, tolak localhost/IP privat); audit `webhook_configured`/`webhook_cleared` | role admin |
+| `GET/PATCH /api/admin/webhooks` | **5 slot URL webhook alert terpisah** (key `webhook_events|tx|wallet|algo`|`user` di `pricing_config`, value `{url}`): GET = semua URL ("" = off); PATCH `{slot,url}` — `url:""` = bersihkan; validasi `assertSafeDestUrl` (http/https, tolak localhost/IP privat); audit `webhook_configured`/`webhook_cleared`. Body kirim dibentuk **`buildWebhookEnvelope()`** (`src/lib/webhooks.ts`): `text`/`content` menyertakan **URL**, field `url` top-level, plus **styling Discord** (`embeds` title/deskripsi/warna/footer/timestamp, `username`, `avatar_url`) | role admin |
 | `GET /api/discord` | URL invite Discord untuk tombol popup kanan-bawah (publik; `Cache-Control: max-age=60`; rate limit 60×/menit/IP; "" = tombol tidak dirender) | publik |
 | `POST/DELETE /api/admin/users/[userId]/wallet` | **POST** `{action:"topup"\|"withdraw", asset:"usdc"\|"sol", amount, walletId?}` — transfer dompet user (mainnet) ↔ wallet aktif admin; **gas SELALU dibayar wallet admin** (feePayer; jadi withdraw USDC user tidak butuh SOL); cek saldo on-chain, cap 50k USDC/1k SOL, buffer gas 0.01 SOL, rate limit 5×/menit fail-closed, audit `admin_wallet_topup`/`admin_wallet_withdraw`. **DELETE** `?walletId=` — hapus permanen dompet user: mainnet wajib saldo hampir nol (USDC=0 & SOL<0.001, selain itu `409` — withdraw/sweep dulu); `balances_cache` (PK, tanpa FK) dihapus manual, FK lain (`orders`,`wallet_events`,…) `on delete set null`; audit `admin_wallet_deleted` | role admin |
 | `DELETE /api/algos/[id]` | hapus permanen algo (**hanya admin** — moderasi konten; cascade `algo_*`: hooks/messages/subscriptions/slots; creator sendiri cukup pause via PATCH `isActive`); audit `algo_deleted` | role admin |
@@ -232,6 +236,8 @@ events(id uuid pk, url text, caption text, meta jsonb default '{}',
 **Catatan penting vs rencana awal:**
 - Autentikasi 100% via **Supabase Auth SDK di client** (login/register/verify) — tidak ada route `/api/auth/*`.
 - Data token & market diambil **server component + lib** (`lib/market`, query Supabase) — tidak ada `/api/tokens`, `/api/pools`, `/api/market/*` terpisah.
+- **Idempotensi DELETE di UI (18 Okt):** respons **404 JSON** dari `DELETE` dianggap **sukses** di 9 aksi hapus (feed sinyal, hook, slot, komentar, event, wallet, algo) — mencegah error 404 palsu saat row sudah terhapus.
+- Halaman **FAQ** (`/faq`) tanpa API — konten statis di `src/app/[locale]/faq/page.tsx`; ditautkan nav/footer + sitemap.
 - `/api/webhooks/payment` (gateway) & `/api/jobs/webhook-indexer` (Helius) = opsional, **belum diimplementasikan** — deteksi topup memakai pembacaan saldo/konfirmasi tx via RPC.
 
 ---
@@ -285,7 +291,7 @@ events(id uuid pk, url text, caption text, meta jsonb default '{}',
 ### Fase 6 — Komunitas, admin, hardening (minggu 8–10)
 - Watchlist, komentar + moderasi, profil publik user, statistik landing.
 - Admin panel: order (retry/refund manual), pricing config, treasury monitor, moderasi, audit log.
-- Hardening: rate limit menyeluruh, CSP & headers, input validation (zod), error boundary, empty/loading state, `npm audit`.
+- Hardening ✅ **sebagian (17–18 Okt)**: rate limit **berbasis DB** (`rate_limit_events` + RPC `rate_limit_take`, atomic lintas isolate, gagal → fail-closed), **security headers + CSP** (`next.config.ts`), input validation (zod), `npm audit`. Sisa: error boundary menyeluruh, empty/loading state pass, moderasi komentar & suspend di UI, audit log viewer.
 - SEO: sitemap lengkap, OG image per token, metadata ID/EN; a11y pass.
 - **Exit:** checklist QA Fase 6 lulus; siap deploy production.
 
@@ -294,7 +300,7 @@ events(id uuid pk, url text, caption text, meta jsonb default '{}',
 ## 7. Strategi Testing
 | Tipe | Alat | Cakupan |
 |---|---|---|
-| Unit ✅ | Vitest | pricing calculator (create_token/pool/add/remove/withdraw + swap fee), format (raw USDC/angka), & resolusi jaringan per-kind (`network.test.ts`: cluster/USDC-mint/treasury demo) — **hijau** |
+| Unit ✅ | Vitest | pricing calculator (create_token/pool/add/remove/withdraw + swap fee), format (raw USDC/angka), resolusi jaringan per-kind (`network.test.ts`: cluster/USDC-mint/treasury demo) & **envelope webhook** (`webhooks.test.ts`: URL di `text`/`content` + field `url`, caption penuh di embed, URL per slot, batas 2000 char, field embed) — **hijau (40 kasus)** |
 | Unit (tertunda) | Vitest | enkripsi AES-GCM, state machine order, validasi input |
 | Integration (tertunda) | Vitest + mock RPC | token-create tx builder (assert instruksi), withdrawal flow |
 | E2E manual (tertunda) | `scripts/devnet-smoke.ts` | topup→create token→pool→swap→withdraw di devnet |
@@ -307,12 +313,12 @@ Definisi selesai per fase: **CI hijau + exit criteria fase terpenuhi** (exit on-
 ---
 
 ## 8. Deployment & Konfigurasi
-1. Supabase project live `vysgkjqbmgbbowsxafok` → migrasi `0001_init` → `0002_storage` → `0003_multi_wallets` → `0004_audit_fixes_multiwallet` (atau `supabase/apply_all.sql` lewat MCP `apply_migration`) → URL + anon key + service role key di `.env`.
+1. Supabase project live `vysgkjqbmgbbowsxafok` → migrasi **`0001_init` … `0010_webhooks`** (0005 rate_limit, 0006 burn, 0007 wallet_archive, 0008 algo, 0009 events, 0010 webhooks — 0008–0010 dijalankan manual via SQL Editor karena `db push` mentok history remote timestamped; lainnya via MCP `apply_migration` / `supabase/apply_all.sql`) → URL + anon key + service role key di `.env`.
 2. **Deploy aktual (Cloudflare Workers, bukan Pages):** `CLOUDFLARE_API_TOKEN=… CLOUDFLARE_ACCOUNT_ID=32532cb4cb1b252afd68622061ab20c2 npm run deploy:cf` — wrapper `scripts/cf-deploy.mjs` (re-exec Node 22 utk macOS < 13.5) menjalankan `wrangler deploy`; `wrangler.jsonc` memuat `build.command: opennextjs-cloudflare build` sehingga build selalu dijalankan sebelum upload (mencegah deploy stale). Live: <https://artian-capital-group.trading-ekaryan.workers.dev>.
 3. **Worker secrets** (`wrangler secret put <NAME>`): `SUPABASE_SERVICE_ROLE_KEY`, `WALLET_MASTER_KEY`, `TREASURY_SECRET_KEY`, `CRON_SECRET`, `HELIUS_API_KEY`, `JUPITER_API_KEY`. Var `NEXT_PUBLIC_*` **inlined saat build** dari `.env` (tidak perlu secret). Opsional: `RESEND_API_KEY` (dibatalkan), `TREASURY_SECRET_KEY_DEMO` (fallback ke treasury utama).
 4. GitHub Actions secrets: sama dengan poin 3 (lihat daftar di `.github/workflows/worker.yml` — worker dijalankan `npx tsx src/worker/run-jobs.ts` tiap menit).
 5. Custom domain (opsional) — saat ini memakai `*.workers.dev`; zona/domain tidak wajib.
-6. Checklist production: RLS aktif (cek `supabase_get_advisors`), CSP & security headers, rate limit, backup DB (pg_dump mingguan via cron), monitoring saldo treasury, **leaked password protection** (Supabase Auth → Password), smoke devnet → mainnet (ganti `NEXT_PUBLIC_SOLANA_CLUSTER`).
+6. Checklist production: RLS aktif (cek `supabase_get_advisors`) ✅, **CSP & security headers ✅** (`next.config.ts`,17 Okt), **rate limit ✅** (berbasis DB, atomic lintas isolate), backup DB (pg_dump mingguan via cron), monitoring saldo treasury, **leaked password protection** (Supabase Auth → Password), smoke devnet → mainnet ✅ (`NEXT_PUBLIC_SOLANA_CLUSTER=mainnet-beta`,17 Okt).
 
 ---
 

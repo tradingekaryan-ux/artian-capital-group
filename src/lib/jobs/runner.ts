@@ -817,26 +817,28 @@ async function handleAlgoForward(payload: Record<string, unknown>): Promise<void
 /* ───────────────── webhook_alert (POST ke URL slot admin) ───────────────── */
 /**
  * Kirim payload JSON ke URL slot (dibaca ulang dari pricing_config saat
- * eksekusi; slot di-clear → skip). Envelope:
- * {event, slot, text, content, ts, data} — `content` = alias Discord.
+ * eksekusi; slot di-clear → skip). Body dibentuk `buildWebhookEnvelope`:
+ * {event, slot, text(+URL), content(+URL), url, ts, data, username,
+ *  avatar_url, embeds} — `content`/`embeds`/`username` = styling Discord,
+ * receiver generik tetap membaca `text`/`content`.
  * Gagal (network / non-2xx) → throw → retry backoff30s×3 seperti job lain.
  */
 async function handleWebhookAlert(payload: Record<string, unknown>): Promise<void> {
   const slot = String(payload.slot ?? "");
-  const { WEBHOOK_SLOTS, getWebhookUrl } = await import("@/lib/webhooks");
+  const { WEBHOOK_SLOTS, getWebhookUrl, buildWebhookEnvelope } = await import("@/lib/webhooks");
   if (!(WEBHOOK_SLOTS as readonly string[]).includes(slot)) return; // payload rusak → selesai
-  const url = await getWebhookUrl(slot as Parameters<typeof getWebhookUrl>[0]);
+  const typedSlot = slot as Parameters<typeof getWebhookUrl>[0];
+  const url = await getWebhookUrl(typedSlot);
   if (!url) return; // sudah di-clear admin → skip
 
-  const text = String(payload.text ?? "");
-  const body = JSON.stringify({
-    event: String(payload.kind ?? "alert"),
-    slot,
-    text,
-    content: text,
-    ts: new Date().toISOString(),
-    data: payload.data ?? {},
-  });
+  const body = JSON.stringify(
+    buildWebhookEnvelope({
+      slot: typedSlot,
+      kind: String(payload.kind ?? "alert"),
+      text: String(payload.text ?? ""),
+      data: (payload.data as Record<string, unknown> | undefined) ?? {},
+    }),
+  );
 
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), 8_000);
