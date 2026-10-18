@@ -180,6 +180,18 @@ Tujuan: user dapat **mengurangi supply** token miliknya secara on-chain, sekalig
 
 ---
 
+### F-L. Algo Marketplace (Feed Sinyal Berlangganan)
+Tujuan: siapa pun dapat **menerbitkan algo** (sinyal via webhook) — gratis atau berbayar USDC — dan member lain dapat **berlangganan**; feed publik terlihat semua orang, subscriber aktif dapat **slot output** (forward otomatis ke Discord/dll).
+
+- **Creator** (`/dashboard/algos`): buat algo (nama, deskripsi, harga USDC 0 = free, billing *lifetime* sekali bayar atau *monthly* 30 hari — renewal = bayar lagi, komisi terpotong tiap pembayaran). Tiap algo dapat maks **5 token input webhook** (`POST /api/algos/[id]/hook/[token]`, JSON fleksibel, rate limit 120/menit/token, payload maks 32 KB). Creator bisa pause/resume algo, revoke hook, hapus message dari feed.
+- **Feed publik** (`/algos` directory + `/algos/[id]`): message tampil untuk **semua orang tanpa login** (termasuk algo berbayar — feed tidak pernah di-paywall); render aman (escape + ekstrak field teks, raw JSON bisa dibuka); live poll tiap 10 detik; paginasi `after=<id>`.
+- **Subscribe**: free → instan tanpa transaksi; berbayar → **satu transaksi USDC mainnet** dari wallet subscriber: komisi platform (TETAP, default **1 USDC**, admin atur di panel pricing key `algo_commission`) → treasury, sisanya → creator; **gas dibayar subscriber** (model §6.3); preflight saldo 402; harga algo wajib **> komisi** (divalidasi saat create/patch/subscribe). Wallet utama = mainnet (demo ditolak). Subscription tercatat di `algo_subscriptions` (riwayat per pembayaran).
+- **Slot output** (subscriber, maks 3 per algo): URL tujuan http(s) dengan guard SSRF (tolak localhost/IP privat/domain internal). Selama langganan aktif setiap message di-forward inline (timeout 8 detik) + **retry via job `algo_forward`** (backoff 30s×attempts); status terakhir per slot tampil di UI. Langganan expired → slot otomatis pause (feed tetap terlihat).
+- **Admin**: commission flat USDC di panel pricing (`PATCH /api/admin/pricing` key `algo_commission`); audit `algo_created|algo_updated|algo_subscribed|algo_hook_*|algo_slot_*|algo_message_deleted`.
+- **Mainnet saja** (konsisten USDC produksi).
+
+---
+
 ## 5. Alur Transaksi & State Machine
 
 ### 5.1 Order layanan
@@ -319,8 +331,19 @@ audit_logs          — actor, action, target, payload, ip
 pricing_config      — key, value(jsonb), updated_by, updated_at
 jobs                — type(create_token|create_pool|add_liquidity|remove_liquidity|
                       withdraw|swap|index_wallet|price_snapshot|
-                      treasury_rebalance (dimatikan)|refund),
+                      treasury_rebalance (dimatikan)|refund|algo_forward (retry feed→slot)),
                       status(pending|running|done|failed), attempts, run_at, last_error
+algos               — id pk, user_id→profiles, name, description, price_usdc,
+                      billing(lifetime|monthly), is_active, created_at, updated_at   (0008)
+algo_hooks          — id pk, algo_id→algos, token unique, label, active,
+                      last_used_at, created_at                                       (0008)
+algo_messages       — id bigserial pk, algo_id→algos, hook_id→algo_hooks null,
+                      payload jsonb, text, created_at                                (0008)
+algo_subscriptions  — id pk, algo_id, user_id, status(active|expired|canceled),
+                      billing, price_raw, commission_raw, tx_signature,
+                      starts_at, expires_at (null = lifetime), created_at             (0008)
+algo_slots          — id pk, algo_id, user_id, dest_url, active, last_status,
+                      last_delivered_at, created_at                                  (0008)
 ```
 
 ---
@@ -374,7 +397,7 @@ jobs                — type(create_token|create_pool|add_liquidity|remove_liqui
 
 ## 13. Status Implementasi & Deviasi (17 Oktober 2026)
 
-Kode seluruh fase (F0–F6 + F-J + F-K burn) diimplementasikan; `lint + typecheck + test (27 kasus) + build` hijau; CI (`ci.yml`) & worker cron (`worker.yml`) aktif. Database Supabase `vysgkjqbmgbbowsxafok` live dengan migrasi **0001–0004 + rate_limit_db + 0006_burn** lewat MCP `apply_migration`; RLS advisors bersih. **LIVE di produksi:** <https://artian-capital-group.trading-ekaryan.workers.dev> (Cloudflare Workers, `npm run deploy:cf`, secrets runtime terpasang termasuk `JUPITER_API_KEY` Server key & PostHog aktif). Smoke on-chain devnet lulus dari site live (create token **SMOKE** + pool Raydium CPMM aktif). **Go-live prep (17 Okt 2026):** e2e smoke 45 cek lulus (public pages, auth, preflight 400/402 semua layanan, admin RBAC, cron) → **reset total database** (semua data user/order/token/pool/jobs/storage dihapus, `pricing_config` 9 baris dipertahankan, akun admin perlu dibuat ulang). **Go-live batch 17 Okt (lanjutan):** production **di-switch ke `mainnet-beta`** (wallet demo tetap devnet; admin dashboard hanya data mainnet; explore menampilkan token devnet dengan label **Devnet**); wizard *Review & pay* kini **itemisasi biaya + gas lengkap** (fee USDC per layanan, estimasi SOL, total kini/menyusul, cek saldo USDC & SOL) + **stepper liquidity ±1 USDC** (default 50, min 0) + slider **LP% default 90/10** — **pool awal dibuat otomatis** oleh runner setelah token confirmed (fee pool 10 USDC + gas di-charge saat itu, idempotency `pool-<orderId>`, gagal → token tetap hidup + CTA manual); cron GitHub Actions (jadwal tidak andal) diganti **Cloudflare Cron Trigger `artian-cron`** (`* * * * *`, terverifikasi per-menit; `worker.yml` tinggal `workflow_dispatch` fallback). Sisa: spike pembanding DEX (F4), rate limit signup Supabase SMTP (≈3/jam, notice di halaman register), rotate kredensial yang pernah lewat chat.
+Kode seluruh fase (F0–F6 + F-J + F-K burn) diimplementasikan; `lint + typecheck + test (27 kasus) + build` hijau; CI (`ci.yml`) & worker cron (`worker.yml`) aktif. Database Supabase `vysgkjqbmgbbowsxafok` live dengan migrasi **0001–0004 + rate_limit_db + 0006_burn** lewat MCP `apply_migration`; RLS advisors bersih. **LIVE di produksi:** <https://artian-capital-group.trading-ekaryan.workers.dev> (Cloudflare Workers, `npm run deploy:cf`, secrets runtime terpasang termasuk `JUPITER_API_KEY` Server key & PostHog aktif). Smoke on-chain devnet lulus dari site live (create token **SMOKE** + pool Raydium CPMM aktif). **Go-live prep (17 Okt 2026):** e2e smoke 45 cek lulus (public pages, auth, preflight 400/402 semua layanan, admin RBAC, cron) → **reset total database** (semua data user/order/token/pool/jobs/storage dihapus, `pricing_config` 9 baris dipertahankan, akun admin perlu dibuat ulang). **Go-live batch 17 Okt (lanjutan):** production **di-switch ke `mainnet-beta`** (wallet demo tetap devnet; admin dashboard hanya data mainnet; explore menampilkan token devnet dengan label **Devnet**); wizard *Review & pay* kini **itemisasi biaya + gas lengkap** (fee USDC per layanan, estimasi SOL, total kini/menyusul, cek saldo USDC & SOL) + **stepper liquidity ±1 USDC** (default 50, min 0) + slider **LP% default 90/10** — **pool awal dibuat otomatis** oleh runner setelah token confirmed (fee pool 10 USDC + gas di-charge saat itu, idempotency `pool-<orderId>`, gagal → token tetap hidup + CTA manual); cron GitHub Actions (jadwal tidak andal) diganti **Cloudflare Cron Trigger `artian-cron`** (`* * * * *`, terverifikasi per-menit; `worker.yml` tinggal `workflow_dispatch` fallback). Sisa: spike pembanding DEX (F4), rate limit signup Supabase SMTP (≈3/jam, notice di halaman register), rotate kredensial yang pernah lewat chat. **Batch F-L algo marketplace (18 Okt 2026):** migrasi **0008** (5 tabel `algo_*` + `jobs.type` `algo_forward`), 9 route API (`/api/algos*`), halaman `/algos`, `/algos/[id]`, `/dashboard/algos`, nav Algos, commission flat admin (`algo_commission`, fallback 1 USDC); rewrite `next.config.ts` `/algos*` → `/en/algos*`; **E2E live `scripts/e2e-algo-test.py` 50/50 lulus** + regresi admin 12/12; gates `lint+typecheck+28 test+build` hijau; deploy live `d0f5ed04`.
 
 | Area (referensi §) | Status | Catatan deviasi / gap |
 |---|---|---|
@@ -392,6 +415,7 @@ Kode seluruh fase (F0–F6 + F-J + F-K burn) diimplementasikan; `lint + typechec
 | F-I: admin panel | ⚠️ Sebagian | Overview, pricing, daftar order, jobs, treasury ✅; **manual retry/refund, moderasi komentar, suspend, viewer audit log belum ada di UI** |
 | F-J: mode demo (devnet) & multi-wallet | ✅ Selesai | Multi-wallet mainnet + maks 1 wallet demo/user; create token & liquidity pool di devnet dibayar USDC devnet; deposit demo manual via faucet eksternal; WD/swap dinonaktifkan di mode demo; token/pool demo difilter dari explore/sitemap |
 | F-K: burn + Burn&Earn + menu dashboard | ✅ Selesai | Migrasi 0006 (`burn_events` + pricing `burn` 0.25 USDC / `burn_earn` gratis); mainnet saja; **izin buy/sell (transfer hook) dibatalkan** oleh user — Raydium CPMM menolak TransferHook (error 6007) |
+| F-L: algo marketplace (feed sinyal + langganan) | ✅ Selesai | Migrasi 0008 (5 tabel `algo_*` + job type `algo_forward`); commission flat default 1 USDC via `pricing_config.algo_commission`; feed publik tanpa login; free = subscribe instan; paid = 1 tx split creator+treasury (gas subscriber); SSRF guard + retry job; **tanpa retention/pagination khusus selain `after`**; moderation = hapus message oleh creator/admin |
 | §7.2 ISR | ⚠️ Deviasi | Implementasi memakai SSR dinamis + cache market 15 detik (ISR tidak dipakai) |
 | §5.1 state machine | ⚠️ Deviasi | Tidak ada status `draft`; ada `cancelled`; swap tanpa bayar di muka (lihat §5.1 yang diperbarui) |
 | Exit criteria on-chain (F1/F2/F4/F5) | ⚠️ Sebagian | Smoke devnet F1/F2 lulus dari site live (16 Okt: token SMOKE + pool CPMM); spike pembanding DEX (F4) & F5 mainnet menyusul |

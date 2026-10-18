@@ -14,6 +14,7 @@ const bodySchema = z.object({
     "remove_liquidity",
     "swap",
     "withdraw",
+    "algo_commission",
   ]),
   value: pricingValueSchema,
 });

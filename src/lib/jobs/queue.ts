@@ -11,7 +11,8 @@ export type JobType =
   | "index_wallet"
   | "price_snapshot"
   | "treasury_rebalance"
-  | "refund";
+  | "refund"
+  | "algo_forward";
 
 export interface JobRow {
   id: number;

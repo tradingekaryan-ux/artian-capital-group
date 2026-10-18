@@ -71,6 +71,8 @@ const nextConfig: NextConfig = {
         { source: "/create/:path*", destination: "/en/create/:path*" },
         { source: "/explore", destination: "/en/explore" },
         { source: "/explore/:path*", destination: "/en/explore/:path*" },
+        { source: "/algos", destination: "/en/algos" },
+        { source: "/algos/:path*", destination: "/en/algos/:path*" },
         { source: "/dashboard", destination: "/en/dashboard" },
         { source: "/dashboard/:path*", destination: "/en/dashboard/:path*" },
         { source: "/token/:path*", destination: "/en/token/:path*" },

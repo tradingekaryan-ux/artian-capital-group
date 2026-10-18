@@ -771,6 +771,32 @@ async function handleTreasuryRebalance(): Promise<void> {
   return;
 }
 
+/* ───────────────── algo_forward (retry feed → slot) ───────────────── */
+/** Retry pengiriman message ke slot yang gagal saat ingest webhook. */
+async function handleAlgoForward(payload: Record<string, unknown>): Promise<void> {
+  const messageId = Number(payload.messageId);
+  if (!Number.isFinite(messageId)) throw new Error("algo_forward: missing messageId");
+  const db = supabaseAdmin();
+  const { data: msg } = await db
+    .from("algo_messages")
+    .select("id, algo_id, payload, text")
+    .eq("id", messageId)
+    .maybeSingle();
+  if (!msg) return; // message sudah dihapus creator → selesai
+  const { getAlgo, deliverToSlots } = await import("@/lib/algos");
+  const algo = await getAlgo(String(msg.algo_id));
+  if (!algo || !algo.is_active) return; // algo dinonaktifkan → skip
+  const only = Array.isArray(payload.slotIds) ? payload.slotIds.map(String) : undefined;
+  const { failed } = await deliverToSlots(
+    { id: algo.id, name: algo.name },
+    msg.id as number,
+    msg.text as string,
+    msg.payload,
+    only,
+  );
+  if (failed.length > 0) throw new Error(`algo_forward: ${failed.length} slot masih gagal`);
+}
+
 const handlers: Record<JobType, Handler> = {
   create_token: handleCreateToken,
   create_pool: handleCreatePool,
@@ -783,6 +809,7 @@ const handlers: Record<JobType, Handler> = {
   price_snapshot: async () => handlePriceSnapshot(),
   treasury_rebalance: async () => handleTreasuryRebalance(),
   refund: handleRefund,
+  algo_forward: handleAlgoForward,
 };
 
 export async function runPendingJobs(limit = 5): Promise<{ done: number; failed: number }> {

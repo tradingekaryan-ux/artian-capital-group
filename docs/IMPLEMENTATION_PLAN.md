@@ -170,6 +170,18 @@ withdrawals(id uuid, user_id, amount_raw, destination, status(pending|processing
 audit_logs(id, actor, action, target, payload jsonb, ip, created_at)
 pricing_config(key pk, value jsonb, updated_by, updated_at)
 jobs(id bigserial, type, payload jsonb, status, attempts int default 0, run_at, last_error, created_at)
+
+-- 0008: algo marketplace (feed sinyal berlangganan; service-role only, RLS tanpa policy)
+algos(id uuid pk, user_id→profiles, name, description, price_usdc numeric default 0,
+      billing check in (lifetime,monthly) default 'lifetime', is_active bool default true,
+      created_at, updated_at)
+algo_hooks(id uuid pk, algo_id→algos, token text unique, label, active bool, last_used_at, created_at)
+algo_messages(id bigserial pk, algo_id→algos, hook_id→algo_hooks null, payload jsonb, text, created_at)
+algo_subscriptions(id uuid pk, algo_id, user_id→profiles, status check in (active,expired,canceled),
+      billing check in (lifetime,monthly), price_raw text, commission_raw text, tx_signature,
+      starts_at, expires_at null=lifetime, created_at)
+algo_slots(id uuid pk, algo_id, user_id, dest_url, active bool, last_status, last_delivered_at, created_at)
+-- jobs.type ditambah 'algo_forward' (retry forward feed→slot; constraint di-drop/re-add)
 ```
 
 **RLS wajib:** semua tabel user-scoped memakai policy `auth.uid() = user_id`; tabel publik (`tokens`, `price_snapshots`, `comments`) dibaca publik, tulis hanya lewat service role (server) — bukan anon key.
@@ -194,7 +206,16 @@ jobs(id bigserial, type, payload jsonb, status, attempts int default 0, run_at, 
 | `GET/POST /api/community/watchlist` | toggle watchlist per user | session |
 | `GET /api/admin/overview` | stats orders/jobs/treasury untuk panel admin | role admin |
 | `GET/POST /api/admin/treasury` | GET: saldo on-chain treasury + wallet aktif admin. POST: `{action:"deposit"\|"withdraw", asset:"usdc"\|"sol", amount:string}` — transfer antara wallet aktif admin (mainnet) ↔ treasury; tujuan di-hardcode server; pre-check saldo + buffer gas; cap 50k USDC / 1k SOL; rate limit 5×/menit fail-closed; audit | role admin |
-| `PATCH /api/admin/pricing` | ubah `pricing_config` | role admin |
+| `PATCH /api/admin/pricing` | ubah `pricing_config` (termasuk `algo_commission` = komisi flat USDC per langganan algo berbayar) | role admin |
+| `GET /api/algos` | daftar algo aktif (`?q=&page=`); `?mine=1` → milik sendiri incl. non-aktif | session opsional / session |
+| `POST /api/algos` | buat algo + 1 token hook default; harga > komisi; free → billing lifetime | session + rate limit |
+| `GET /api/algos/[id]` | detail + feed (`?after=<msgId>`) + mySub + counts; algo non-aktif hanya owner | publik / session opsional |
+| `PATCH /api/algos/[id]` | ubah nama/deskripsi/harga/billing/isActive (owner) | session |
+| `POST /api/algos/[id]/subscribe` | free = instan; paid = 1 tx split USDC (komisi→treasury, sisanya→creator, gas subscriber); mainnet only; preflight 402 | session + rate limit |
+| `POST /api/algos/[id]/hook/[token]` | INGEST publik: JSON → message feed + forward inline + enqueue `algo_forward` bila gagal | token (404/409/413/429) |
+| `GET/POST /api/algos/[id]/hooks` · `DELETE …/hooks/[hookId]` | CRUD token input (maks 5, owner) | session |
+| `GET/POST /api/algos/[id]/slots` · `DELETE …/slots/[slotId]` | slot output subscriber (maks 3; wajib sub aktif; SSRF guard) | session |
+| `DELETE /api/algos/[id]/messages/[messageId]` | hapus message (owner/admin) | session |
 | `POST /api/cron/run-jobs` | trigger manual worker (cadangan di luar GH Actions) | `Bearer CRON_SECRET` |
 
 **Catatan penting vs rencana awal:**
@@ -266,6 +287,7 @@ jobs(id bigserial, type, payload jsonb, status, attempts int default 0, run_at, 
 | Unit (tertunda) | Vitest | enkripsi AES-GCM, state machine order, validasi input |
 | Integration (tertunda) | Vitest + mock RPC | token-create tx builder (assert instruksi), withdrawal flow |
 | E2E manual (tertunda) | `scripts/devnet-smoke.ts` | topup→create token→pool→swap→withdraw di devnet |
+| E2E live ✅ | `scripts/e2e-admin-test.py` + `scripts/e2e-algo-test.py` | sesi magiclink→cookie SSR: admin wallet/treasury (12 cek, termasuk branch tolak preflight) & **algo marketplace** (50 cek: feed publik, CRUD algo/hook, subscribe free instan, preflight bayar 402, SSRF slot, limit3, job `algo_forward`, moderasi, pause) — keduanya lulus penuh di live |
 | CI ✅ | GitHub Actions `ci.yml` | `lint`, `test`, `typecheck` (`next typegen && tsc`), `build` tiap push/PR — Node 22 |
 | Post-deploy | worker cron tiap menit | sentuh DB tiap menit (de facto heartbeat, PRD §10 R5) + jalankan job siklis `price_snapshot` |
 

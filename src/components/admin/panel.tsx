@@ -30,6 +30,32 @@ interface OrderItem {
 
 export function AdminPanel() {
   const t = useTranslations("admin");
+  const [commission, setCommission] = useState("1");
+  const [savingCommission, setSavingCommission] = useState(false);
+  const [commissionMsg, setCommissionMsg] = useState<string | null>(null);
+
+  async function saveCommission() {
+    setSavingCommission(true);
+    setCommissionMsg(null);
+    try {
+      const n = Number(commission);
+      if (!Number.isFinite(n) || n < 0) throw new Error("Invalid amount");
+      const res = await fetch("/api/admin/pricing", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ key: "algo_commission", value: { amount_usdc: n } }),
+      });
+      if (!res.ok) {
+        const data = (await res.json().catch(() => null)) as { error?: string } | null;
+        throw new Error(data?.error ?? `HTTP ${res.status}`);
+      }
+      setCommissionMsg("✓");
+    } catch (e) {
+      setCommissionMsg(e instanceof Error ? e.message : "Error");
+    } finally {
+      setSavingCommission(false);
+    }
+  }
   const [data, setData] = useState<Overview | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -109,6 +135,22 @@ export function AdminPanel() {
             ))}
           </tbody>
         </table>
+        <div className="mt-4 flex flex-wrap items-end gap-3 border-t-2 border-black/10 pt-4">
+          <div className="flex flex-col gap-1">
+            <label className="text-xs font-bold uppercase tracking-wide">{t("algoCommission")}</label>
+            <input
+              value={commission}
+              onChange={(e) => setCommission(e.target.value)}
+              inputMode="decimal"
+              className="input w-28 !text-sm"
+            />
+            <p className="text-[11px] text-muted-ink">{t("algoCommissionHint")}</p>
+          </div>
+          <button onClick={() => void saveCommission()} disabled={savingCommission} className="btn btn-secondary !py-1.5 !text-xs">
+            {t("save")}
+          </button>
+          {commissionMsg ? <span className="text-xs font-bold">{commissionMsg}</span> : null}
+        </div>
         </div>
       </section>
 

@@ -42,6 +42,14 @@ export function Nav() {
               {t("explore")}
             </Link>
             <Link
+              href="/algos"
+              className={`rounded-full border-2 border-transparent px-3 py-1 transition-colors hover:border-[#d8ff3e] hover:text-[#d8ff3e] ${
+                pathname === "/algos" || pathname.startsWith("/algos/") ? "border-[#d8ff3e] text-[#d8ff3e]" : ""
+              }`}
+            >
+              {t("algos")}
+            </Link>
+            <Link
               href="/create"
               className={`rounded-full border-2 border-transparent px-3 py-1 transition-colors hover:border-[#d8ff3e] hover:text-[#d8ff3e] ${
                 pathname === "/create" ? "border-[#d8ff3e] text-[#d8ff3e]" : ""
