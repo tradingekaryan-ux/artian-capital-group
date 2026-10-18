@@ -1,14 +1,17 @@
 import { NextResponse } from "next/server";
 import { requireActiveUser } from "@/lib/db/client";
-import { archiveWallet, ACTIVE_WALLET_COOKIE } from "@/lib/solana/wallet";
+import { archiveWallet } from "@/lib/solana/wallet";
 import { rateLimit, clientIp } from "@/lib/security/ratelimit";
 import { audit } from "@/lib/security/audit";
 
 /**
  * DELETE /api/wallet/[id]
  * Arsipkan (soft-delete) wallet milik user sendiri.
- * - Wallet yang diarsipkan hilang dari daftar & tidak bisa jadi aktif.
- * - Cookie `wid` dibersihkan agar browser tidak mengacu wallet lama.
+ * - Wallet AKTIF tidak bisa diarsipkan (switch dulu) — dicek di archiveWallet().
+ * - Wallet terarsip hilang dari daftar & tidak bisa jadi aktif; tetap terlihat
+ *   di dashboard admin dengan label Archived.
+ * - Cookie `wid` TIDAK disentuh di sini: wallet yang diarsip selalu non-aktif
+ *   (ditolak di atas), jadi pilihan wallet aktif user tidak berubah.
  * - Rate limit: 10 x arsip / jam.
  */
 export async function DELETE(
@@ -40,16 +43,7 @@ export async function DELETE(
       ip,
     });
 
-    // Hapus cookie wid agar tidak mengacu wallet yang sudah diarsipkan
-    const res = NextResponse.json({ ok: true, archivedId: archived.id });
-    res.cookies.set(ACTIVE_WALLET_COOKIE, "", {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "lax",
-      path: "/",
-      maxAge: 0,
-    });
-    return res;
+    return NextResponse.json({ ok: true, archivedId: archived.id });
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Failed";
     if (msg === "Wallet not found") {
@@ -57,6 +51,9 @@ export async function DELETE(
     }
     if (msg === "Already archived") {
       return NextResponse.json({ error: "Wallet already archived" }, { status: 409 });
+    }
+    if (msg.startsWith("Cannot archive the active wallet")) {
+      return NextResponse.json({ error: msg }, { status: 409 });
     }
     console.error("[wallet archive] failed:", e);
     return NextResponse.json({ error: "Failed to archive wallet" }, { status: 500 });

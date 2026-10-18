@@ -132,9 +132,11 @@ artian-capital/
 profiles(user_id uuid pk→auth.users, username unique, display_name, bio, role text default 'user',
          is_suspended bool default false, created_at)
 -- multi-wallet: banyak mainnet per user (label), maks 1 demo per user (partial unique index)
+-- 0007: archived_at (soft-delete) — indeks unik demo hanya hitung non-arsip
 wallets(id uuid pk, user_id→profiles, kind text check in (mainnet,demo) default 'mainnet',
         label text, public_key text unique, enc_secret_key text, iv text, auth_tag text, created_at,
-        unique index (user_id) where kind='demo')
+        archived_at timestamptz null,
+        unique index (user_id) where kind='demo' and archived_at is null)
 wallet_events(id bigserial, user_id, wallet_id, kind text default 'mainnet',
               type text check in (deposit,payment,withdrawal,swap,refund,lp),
               mint text, amount_raw numeric, signature text, meta jsonb, confirmed_at timestamptz,
@@ -180,9 +182,10 @@ jobs(id bigserial, type, payload jsonb, status, attempts int default 0, run_at, 
 |---|---|---|
 | `POST /api/orders` | buat order: union zod (`create_token`, `create_pool`, `add_liquidity`, `remove_liquidity`, `withdraw`, `swap`) + idempotency key + authorizeConfig + `kind` (`mainnet`\|`demo`, default `mainnet`) | session |
 | `GET /api/orders/[id]` | status order (polling UI; embed `mint` token bila sudah ada) | session |
-| `GET /api/wallet` | daftar wallet user (mainnet multi + demo) + wallet aktif | session |
+| `GET /api/wallet` | daftar wallet user (mainnet multi + demo, non-arsip) + wallet aktif | session |
 | `POST /api/wallet` | buat wallet baru: `{action:"create_mainnet",label?}` atau `{action:"create_demo"}` (maks 1 demo) → set cookie `wid` | session + rate limit |
-| `POST /api/wallet/active` | pindah wallet aktif: `{walletId}` → validasi kepemilikan → set cookie `wid` | session |
+| `DELETE /api/wallet/[id]` | arsipkan (soft-delete) wallet non-aktif milik sendiri; wallet aktif ditolak (409, switch dulu); audit + rate limit 10/jam | session |
+| `POST /api/wallet/active` | pindah wallet aktif: `{walletId}` → validasi kepemilikan + non-arsip → set cookie `wid` | session |
 | `GET /api/wallet/balance` | saldo USDC/SOL on-chain wallet **aktif** (baca RPC per kind) | session |
 | `POST /api/wallet/withdraw` | ajukan withdrawal + kirim OTP email (hanya wallet mainnet) | session + rate limit |
 | `POST /api/wallet/withdraw/verify` | verifikasi OTP → eksekusi job withdrawal | session + rate limit |
@@ -190,6 +193,7 @@ jobs(id bigserial, type, payload jsonb, status, attempts int default 0, run_at, 
 | `POST/GET /api/community/comments` · `DELETE` | komentar (buat/publik-baca; hapus milik sendiri) | session / publik |
 | `GET/POST /api/community/watchlist` | toggle watchlist per user | session |
 | `GET /api/admin/overview` | stats orders/jobs/treasury untuk panel admin | role admin |
+| `GET/POST /api/admin/treasury` | GET: saldo on-chain treasury + wallet aktif admin. POST: `{action:"deposit"\|"withdraw", asset:"usdc"\|"sol", amount:string}` — transfer antara wallet aktif admin (mainnet) ↔ treasury; tujuan di-hardcode server; pre-check saldo + buffer gas; cap 50k USDC / 1k SOL; rate limit 5×/menit fail-closed; audit | role admin |
 | `PATCH /api/admin/pricing` | ubah `pricing_config` | role admin |
 | `POST /api/cron/run-jobs` | trigger manual worker (cadangan di luar GH Actions) | `Bearer CRON_SECRET` |
 

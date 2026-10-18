@@ -95,7 +95,11 @@
       "creating": "Creating…",
       "onlyOneDemo": "You already have the demo wallet. Switch to it instead.",
       "demoBadge": "DEMO",
-      "switched": "Wallet switched"
+      "switched": "Wallet switched",
+      "archive": "Archive wallet",
+      "confirmArchive": "Archive this wallet? It will be hidden from your list. Admins can still view it.",
+      "treasuryBadge": "TREASURY",
+      "treasuryLabel": "Treasury wallet"
     },
     "demo": {
       "title": "Demo wallet (devnet)",
@@ -302,7 +306,16 @@
     "mainnetOnlyNote": "Devnet/demo data is excluded from this dashboard — tokens, wallets, balances, orders and revenue count real mainnet activity only.",
     "archived": "Archived",
     "walletsAll": "All wallets",
-    "archiveWallet": "Archive wallet"
+    "treasuryYourWallet": "Your active wallet",
+    "treasuryAsset": "Asset",
+    "treasuryAmount": "Amount",
+    "treasuryDeposit": "Deposit",
+    "treasuryWithdraw": "Withdraw",
+    "treasurySending": "Sending…",
+    "treasuryLoading": "Loading treasury…",
+    "treasurySent": "Sent. Signature: {sig}…",
+    "confirmTreasuryDeposit": "Deposit {amount} {asset} from your active wallet to treasury?",
+    "confirmTreasuryWithdraw": "Withdraw {amount} {asset} from treasury to your active wallet?"
   },
   "fees": {
     "title": "How fees work",

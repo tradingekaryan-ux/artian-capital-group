@@ -20,7 +20,7 @@ export async function POST(req: Request) {
   if (!parsed.success) return NextResponse.json({ error: "Validation failed" }, { status: 400 });
 
   const wallet = await getWalletById(parsed.data.walletId);
-  if (!wallet || wallet.user_id !== auth.user.id) {
+  if (!wallet || wallet.user_id !== auth.user.id || wallet.archived_at) {
     return NextResponse.json({ error: "Wallet not found" }, { status: 404 });
   }
 

@@ -9,6 +9,7 @@ interface WalletItem {
   kind: "mainnet" | "demo";
   label: string | null;
   public_key: string;
+  isTreasury?: boolean;
 }
 
 export function WalletSwitcher({ wallets, activeId }: { wallets: WalletItem[]; activeId: string | null }) {
@@ -45,7 +46,7 @@ export function WalletSwitcher({ wallets, activeId }: { wallets: WalletItem[]; a
   }
 
   async function archiveWalletAction(walletId: string) {
-    if (!window.confirm("Archive this wallet? It will be hidden from your list.")) return;
+    if (!window.confirm(t("confirmArchive"))) return;
     setBusy(true);
     setError(null);
     try {
@@ -70,6 +71,25 @@ export function WalletSwitcher({ wallets, activeId }: { wallets: WalletItem[]; a
       </div>
       <div className="flex flex-col gap-2 p-4">
         {wallets.map((w) => {
+          // Treasury = entri virtual admin: tanpa switch, tanpa arsip.
+          if (w.isTreasury) {
+            return (
+              <div
+                key={w.id}
+                className="flex items-center justify-between gap-2 rounded-xl border-2 border-black bg-[#f5f3ff] px-3 py-2 text-sm font-bold"
+              >
+                <span className="flex min-w-0 items-center gap-2">
+                  <span className="mono truncate text-xs">{w.public_key.slice(0, 6)}…{w.public_key.slice(-4)}</span>
+                  <span className="rounded-full border-2 border-black bg-[#d8ff3e] px-2 py-0.5 text-[10px] uppercase">
+                    {t("treasuryBadge")}
+                  </span>
+                </span>
+                <span className="shrink-0 text-[10px] uppercase tracking-wide text-muted-ink">
+                  {t("treasuryLabel")}
+                </span>
+              </div>
+            );
+          }
           const active = w.id === activeId;
           return (
             <div key={w.id} className="flex items-center gap-2">
@@ -95,12 +115,12 @@ export function WalletSwitcher({ wallets, activeId }: { wallets: WalletItem[]; a
                   {active ? t("active") : w.kind === "demo" ? t("demo") : t("mainnet")}
                 </span>
               </button>
-              {/* Archive button — only show when not active */}
+              {/* Tombol arsip — hanya untuk wallet non-aktif (wallet aktif harus switch dulu). */}
               {!active && (
                 <button
                   type="button"
                   disabled={busy}
-                  title="Archive wallet"
+                  title={t("archive")}
                   onClick={() => void archiveWalletAction(w.id)}
                   className="shrink-0 rounded-lg border-2 border-black bg-white px-2 py-1.5 text-[11px] font-bold uppercase hover:bg-[#fee2e2] disabled:opacity-40"
                 >

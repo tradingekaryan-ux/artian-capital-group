@@ -5,7 +5,7 @@
 |---|---|
 | **Versi** | 1.2 |
 | **Tanggal** | 17 Oktober 2026 |
-| **Status** | **LIVE** di Cloudflare Workers; smoke on-chain devnet lulus; mode demo + multi-wallet aktif; `lint + typecheck + test + build` hijau |
+| **Status** | **LIVE** di Cloudflare Workers; smoke on-chain devnet lulus; mode demo + multi-wallet + **arsip wallet** aktif; **treasury deposit/withdraw USDC+SOL di admin panel**; `lint + typecheck + test + build` hijau |
 | **Penyesuaian** | Disesuaikan dengan implementasi aktual (lihat §13) |
 | **Layanan fase 1** | Pembuatan token crypto (Solana) + Liquidity Pool + Market Data |
 | **Target pasar** | Global (Bahasa Inggris & Bahasa Indonesia) |
@@ -155,13 +155,15 @@ Total supply token
 ### F-I. Admin Panel (minim)
 - Daftar order & status (manual retry/refund).
 - Konfigurasi harga layanan (mis. create token, buat LP, fee withdrawal, fee swap).
-- Monitoring treasury: saldo USDC (penerima fee) & riwayat pengeluaran — treasury tidak menyimpan float gas SOL.
+- Monitoring & pengelolaan treasury: saldo on-chain real-time (SOL + USDC) + **deposit/withdraw USDC & SOL dari panel** (`POST /api/admin/treasury`) — tujuan withdraw & sumber deposit selalu **wallet aktif admin (mainnet)**, ditentukan server (bukan input alamat bebas); pre-check saldo + pesan jelas; rate limit 5×/menit fail-closed; audit log. Withdraw dibayar gas-nya oleh treasury (treasury wajib punya SOL — deposit SOL dulu bila habis).
+- Daftar user: detail menampilkan **semua wallet termasuk yang terarsip** (badge Archived).
 - Moderasi komentar & user (suspend).
 - Log audit.
 
 ### F-J. Mode Demo (Devnet) & Multi-Wallet
 Tujuan: user bisa **belajar** membuat token & liquidity pool di jaringan uji sebelum memakai dana sungguhan.
 - **Multi-wallet**: setiap user dapat membuat **banyak wallet mainnet** (berlabel) dan **maksimal 1 wallet demo (devnet)**. Wallet aktif dipilih lewat switcher di dashboard (cookie `wid`); saldo, token, dan orders mengikuti wallet aktif.
+- **Arsip wallet (soft-delete, 18 Okt)**: user bisa mengarsipkan wallet non-aktif (tombol ✕) — `wallets.archived_at` diisi, wallet hilang dari daftar & tidak bisa jadi aktif (dicek di `getActiveWallet` + switch route; cookie basi lintas-device diabaikan). Wallet **aktif tidak bisa diarsipkan** (switch dulu). Wallet terarsip **tetap terlihat di dashboard admin** (badge Archived). Indeks unik demo hanya menghitung wallet non-arsip — mengarsipkan demo membebaskan kuota "1 demo" untuk membuat yang baru. Untuk admin, daftar wallet di dashboard juga menampilkan **entri virtual "Treasury wallet"** (display-only: tanpa switch, tanpa arsip).
 - **Wallet demo = sandbox Devnet**:
   - Deposit **manual**: user menyalin alamat wallet demo lalu meminta (faucet) SOL & USDC devnet dari situs eksternal — `faucet.solana.com` (SOL) dan `faucet.circle.com` (USDC, jaringan Solana Devnet) — dengan menempel alamat wallet sendiri. Tanpa deposit otomatis, tanpa airdrop in-app.
   - Layanan yang tersedia: **create token → create pool → add/remove liquidity** (harga sama dengan mainnet, dibayar dengan **USDC devnet**).
@@ -241,7 +243,7 @@ buffer_gas default 15% (fluktuasi harga SOL & priority fee)
 - Treasury = hot wallet platform (terpisah dari wallet user): **penerima fee USDC** dan **sumber dana refund** — **bukan** fee-payer transaksi.
 - Treasury **tidak menyimpan float SOL** — semua gas dibayar wallet user dari saldo SOL-nya sendiri (operator platform tidak perlu mendanai gas; $0 biaya gas platform).
 - **Refund** ditandatangani treasury sebagai pengirim USDC, tetapi **gas refund dari saldo SOL wallet user**; job refund diretry lama (hingga 60×) agar user sempat mengisi SOL bila habis. Jika SOL user habis permanen, refund tertunda sampai user top-up (risiko langka, tercatat di §10).
-- Pendapatan platform (USDC di treasury) ditarik manual oleh admin via private key di environment (fase 1, operasi manual).
+- **Penarikan & pengisian treasury via admin panel (18 Okt)**: admin dashboard (tab Revenue) punya kontrol **deposit** (wallet aktif admin → treasury) & **withdraw** (treasury → wallet aktif admin) dalam **USDC atau SOL**. Tujuan/source di-hardcode server (hanya wallet aktif admin mainnet — anti drain ke alamat asing); pre-check saldo + buffer gas 0.01 SOL; nominal pakai `uiToRaw` (presisi string); cap 50.000 USDC / 1.000 SOL per transaksi; rate limit 5×/menit fail-closed; audit `treasury_deposit`/`treasury_withdraw`. Catatan: withdraw dari treasury butuh SOL di treasury untuk gas — deposit SOL dulu bila 0.
 
 ---
 
@@ -286,8 +288,10 @@ buffer_gas default 15% (fluktuasi harga SOL & priority fee)
 profiles            — user_id pk→auth.users, username, display_name, bio,
                       role(user|admin), is_suspended, created_at
 wallets             — id pk, user_id→profiles, kind(mainnet|demo), label,
-                      public_key unique, enc_secret_key, iv, auth_tag
-                      (banyak wallet mainnet per user; partial unique 1 demo/user)
+                      public_key unique, enc_secret_key, iv, auth_tag,
+                      archived_at timestamptz null (soft-delete; 0007)
+                      (banyak wallet mainnet per user; partial unique 1 demo/user
+                       NON-arsip: where kind='demo' and archived_at is null)
 balances_cache      — wallet_id pk→wallets, user_id, usdc_raw, sol_lamports, refreshed_at
 wallet_events       — user_id, wallet_id, kind(mainnet|demo),
                       type(deposit|payment|withdrawal|swap|refund|lp),

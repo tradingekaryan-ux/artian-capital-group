@@ -16,8 +16,15 @@ export default async function DashboardLayout({
   if (!user) redirect("/login");
 
   // Pastikan row profile + wallet kustodial sudah ada.
-  let wallets: { id: string; kind: "mainnet" | "demo"; label: string | null; public_key: string }[] = [];
+  let wallets: {
+    id: string;
+    kind: "mainnet" | "demo";
+    label: string | null;
+    public_key: string;
+    isTreasury?: boolean;
+  }[] = [];
   let activeId: string | null = null;
+  let isAdmin = false;
   try {
     await ensureProfile(user.id, {
       username: user.user_metadata?.username as string | undefined,
@@ -45,11 +52,27 @@ export default async function DashboardLayout({
       .select("role")
       .eq("user_id", user.id)
       .maybeSingle();
-    if (profile?.role === "admin") {
+    isAdmin = profile?.role === "admin";
+    if (isAdmin) {
       items.push({ href: "/admin", label: t("admin") });
     }
   } catch {
     /* profiles belum ada — tanpa tautan admin */
+  }
+
+  // Treasury tampil sebagai entri virtual di daftar wallet ADMIN:
+  // display-only (tanpa switch / tanpa arsip), label "Treasury wallet".
+  if (isAdmin) {
+    try {
+      const { getTreasury } = await import("@/lib/chain/usdc");
+      const tAddr = getTreasury("mainnet").publicKey.toBase58();
+      wallets = [
+        ...wallets,
+        { id: "__treasury__", kind: "mainnet" as const, label: null, public_key: tAddr, isTreasury: true },
+      ];
+    } catch {
+      /* TREASURY_SECRET_KEY belum diset — tanpa entri treasury */
+    }
   }
 
   return (

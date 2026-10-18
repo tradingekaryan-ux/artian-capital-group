@@ -19,6 +19,7 @@ interface TreasuryData {
   address: string;
   sol: number;
   usdc: number;
+  wallet: { address: string; kind: string; sol: number; usdc: number } | null;
 }
 
 export function AdminRevenuePanel() {
@@ -26,10 +27,10 @@ export function AdminRevenuePanel() {
   const [data, setData] = useState<Revenue | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [treasury, setTreasury] = useState<TreasuryData | null>(null);
-  const [withdrawTo, setWithdrawTo] = useState("");
-  const [withdrawAmt, setWithdrawAmt] = useState("");
-  const [withdrawing, setWithdrawing] = useState(false);
-  const [withdrawMsg, setWithdrawMsg] = useState<string | null>(null);
+  const [asset, setAsset] = useState<"usdc" | "sol">("usdc");
+  const [amount, setAmount] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [txMsg, setTxMsg] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -61,25 +62,35 @@ export function AdminRevenuePanel() {
     };
   }, [t]);
 
-  async function doWithdraw() {
-    if (!withdrawTo || !withdrawAmt) return;
-    setWithdrawing(true);
-    setWithdrawMsg(null);
+  async function doTransfer(action: "deposit" | "withdraw") {
+    if (!amount) return;
+    const assetLabel = asset.toUpperCase();
+    const confirmText =
+      action === "deposit"
+        ? t("confirmTreasuryDeposit", { amount, asset: assetLabel })
+        : t("confirmTreasuryWithdraw", { amount, asset: assetLabel });
+    if (!window.confirm(confirmText)) return;
+    setBusy(true);
+    setTxMsg(null);
     try {
       const res = await fetch("/api/admin/treasury", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "withdraw_usdc", toAddress: withdrawTo, amountUsdc: Number(withdrawAmt) }),
+        body: JSON.stringify({ action, asset, amount }),
       });
-      const j = await res.json().catch(() => ({})) as { ok?: boolean; sig?: string; error?: string };
+      const j = (await res.json().catch(() => ({}))) as { ok?: boolean; sig?: string; error?: string };
       if (!res.ok) throw new Error(j.error ?? "Failed");
-      setWithdrawMsg(`✅ Sent! sig: ${(j.sig ?? "").slice(0, 20)}…`);
-      setWithdrawTo("");
-      setWithdrawAmt("");
+      setTxMsg(t("treasurySent", { sig: (j.sig ?? "").slice(0, 24) }));
+      setAmount("");
+      // Muat ulang saldo kedua sisi.
+      fetch("/api/admin/treasury")
+        .then((r) => (r.ok ? r.json() : null))
+        .then((j) => j && setTreasury(j))
+        .catch(() => {});
     } catch (e) {
-      setWithdrawMsg(`❌ ${e instanceof Error ? e.message : "Error"}`);
+      setTxMsg(e instanceof Error ? e.message : "Error");
     } finally {
-      setWithdrawing(false);
+      setBusy(false);
     }
   }
 
@@ -107,50 +118,78 @@ export function AdminRevenuePanel() {
             <div className="flex flex-col gap-4">
               <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
                 <div className="rounded-xl border-2 border-black bg-[#f5f3ff] p-3">
-                  <p className="text-[10px] font-bold uppercase tracking-wide text-muted-ink">SOL</p>
+                  <p className="text-[10px] font-bold uppercase tracking-wide text-muted-ink">{t("treasury")} · SOL</p>
                   <p className="display mt-1 text-2xl">{treasury.sol.toFixed(4)}</p>
                 </div>
                 <div className="rounded-xl border-2 border-black bg-[#f0fdf4] p-3">
-                  <p className="text-[10px] font-bold uppercase tracking-wide text-muted-ink">USDC</p>
+                  <p className="text-[10px] font-bold uppercase tracking-wide text-muted-ink">{t("treasury")} · USDC</p>
                   <p className="display mt-1 text-2xl">{treasury.usdc.toFixed(2)}</p>
                 </div>
+                <div className="rounded-xl border-2 border-black bg-white p-3">
+                  <p className="text-[10px] font-bold uppercase tracking-wide text-muted-ink">{t("treasuryYourWallet")} · SOL</p>
+                  <p className="display mt-1 text-2xl">{treasury.wallet ? treasury.wallet.sol.toFixed(4) : "—"}</p>
+                </div>
+                <div className="rounded-xl border-2 border-black bg-white p-3">
+                  <p className="text-[10px] font-bold uppercase tracking-wide text-muted-ink">{t("treasuryYourWallet")} · USDC</p>
+                  <p className="display mt-1 text-2xl">{treasury.wallet ? treasury.wallet.usdc.toFixed(2) : "—"}</p>
+                </div>
               </div>
-              <p className="mono text-xs text-muted-ink">{t("treasuryAddress")}: {treasury.address}</p>
-              {/* Withdraw USDC form */}
+              <p className="mono break-all text-xs text-muted-ink">
+                {t("treasuryAddress")}: {treasury.address}
+                {treasury.wallet ? ` · ${t("treasuryYourWallet")}: ${treasury.wallet.address.slice(0, 6)}…${treasury.wallet.address.slice(-4)}` : ""}
+              </p>
+              {/* Deposit / withdraw — tujuan & sumber ditentukan server */}
               <div className="flex flex-wrap items-end gap-2 rounded-xl border-2 border-black p-3">
                 <div className="flex flex-col gap-1">
-                  <label className="text-[10px] font-bold uppercase tracking-wide text-muted-ink">To Address</label>
-                  <input
-                    value={withdrawTo}
-                    onChange={(e) => setWithdrawTo(e.target.value)}
-                    placeholder="Solana address…"
-                    className="input !py-1 text-xs w-56"
-                  />
+                  <span className="text-[10px] font-bold uppercase tracking-wide text-muted-ink">{t("treasuryAsset")}</span>
+                  <div className="flex gap-1">
+                    {(["usdc", "sol"] as const).map((a) => (
+                      <button
+                        key={a}
+                        type="button"
+                        disabled={busy}
+                        onClick={() => setAsset(a)}
+                        className={`rounded-full border-2 border-black px-3 py-1 text-xs font-bold uppercase ${
+                          asset === a ? "bg-[#d8ff3e] shadow-[2px_2px_0_0_#000]" : "bg-white"
+                        }`}
+                      >
+                        {a.toUpperCase()}
+                      </button>
+                    ))}
+                  </div>
                 </div>
                 <div className="flex flex-col gap-1">
-                  <label className="text-[10px] font-bold uppercase tracking-wide text-muted-ink">USDC Amount</label>
+                  <label htmlFor="treasury-amount" className="text-[10px] font-bold uppercase tracking-wide text-muted-ink">
+                    {t("treasuryAmount")}
+                  </label>
                   <input
-                    value={withdrawAmt}
-                    onChange={(e) => setWithdrawAmt(e.target.value)}
+                    id="treasury-amount"
+                    value={amount}
+                    onChange={(e) => setAmount(e.target.value)}
                     placeholder="0.00"
-                    type="number"
-                    min="0.01"
-                    step="0.01"
+                    inputMode="decimal"
                     className="input !py-1 text-xs w-28"
                   />
                 </div>
                 <button
-                  className="btn btn-secondary !py-1.5 !text-xs"
-                  disabled={withdrawing || !withdrawTo || !withdrawAmt}
-                  onClick={() => void doWithdraw()}
+                  className="btn btn-primary !py-1.5 !text-xs"
+                  disabled={busy || !amount}
+                  onClick={() => void doTransfer("deposit")}
                 >
-                  {withdrawing ? "Sending…" : "Withdraw USDC"}
+                  {busy ? t("treasurySending") : t("treasuryDeposit")}
                 </button>
-                {withdrawMsg && <p className="w-full text-xs font-bold">{withdrawMsg}</p>}
+                <button
+                  className="btn btn-secondary !py-1.5 !text-xs"
+                  disabled={busy || !amount}
+                  onClick={() => void doTransfer("withdraw")}
+                >
+                  {busy ? t("treasurySending") : t("treasuryWithdraw")}
+                </button>
+                {txMsg && <p className="w-full text-xs font-bold">{txMsg}</p>}
               </div>
             </div>
           ) : (
-            <p className="text-sm text-muted-ink">Loading treasury…</p>
+            <p className="text-sm text-muted-ink">{t("treasuryLoading")}</p>
           )}
         </div>
       </section>

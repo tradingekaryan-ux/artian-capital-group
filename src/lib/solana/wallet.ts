@@ -159,7 +159,8 @@ export async function listAllWallets(userId: string): Promise<WalletRow[]> {
 /**
  * Arsipkan wallet (soft-delete). Wallet yang diarsipkan hilang dari tampilan
  * user & tidak bisa jadi wallet aktif; tetap terlihat di panel admin.
- * Melempar error bila wallet bukan milik userId atau sudah diarsipkan.
+ * Wallet AKTIF tidak bisa diarsipkan — switch dulu ke wallet lain.
+ * Melempar error bila wallet bukan milik userId, sudah diarsipkan, atau aktif.
  */
 export async function archiveWallet(userId: string, walletId: string): Promise<WalletRow> {
   const db = supabaseAdmin();
@@ -171,6 +172,12 @@ export async function archiveWallet(userId: string, walletId: string): Promise<W
     .maybeSingle();
   if (!row) throw new Error("Wallet not found");
   if ((row as WalletRow).archived_at) throw new Error("Already archived");
+  // Wallet aktif (cookie `wid` browser ini) tidak boleh diarsipkan.
+  const { cookies } = await import("next/headers");
+  const store = await cookies();
+  if (store.get(ACTIVE_WALLET_COOKIE)?.value === walletId) {
+    throw new Error("Cannot archive the active wallet — switch to another wallet first.");
+  }
   const { data: updated, error } = await db
     .from("wallets")
     .update({ archived_at: new Date().toISOString() })
@@ -289,7 +296,8 @@ export async function getActiveWallet(userId: string): Promise<WalletRow> {
   const wid = store.get(ACTIVE_WALLET_COOKIE)?.value;
   if (wid) {
     const row = await getWalletById(wid);
-    if (row && row.user_id === userId) return row;
+    // Wallet terarsip tidak valid sebagai aktif (cookie basi lintas-device).
+    if (row && row.user_id === userId && !row.archived_at) return row;
   }
   return ensureWallet(userId, "mainnet");
 }
