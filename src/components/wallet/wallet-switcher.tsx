@@ -51,7 +51,8 @@ export function WalletSwitcher({ wallets, activeId }: { wallets: WalletItem[]; a
     setError(null);
     try {
       const res = await fetch(`/api/wallet/${walletId}`, { method: "DELETE" });
-      if (!res.ok) {
+      const gone = res.status === 404 && res.headers.get("content-type")?.includes("application/json") === true;
+      if (!res.ok && !gone) {
         const data = (await res.json().catch(() => null)) as { error?: string } | null;
         throw new Error(data?.error ?? `HTTP ${res.status}`);
       }

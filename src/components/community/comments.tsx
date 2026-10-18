@@ -66,7 +66,8 @@ export function CommentsSection({
 
   async function remove(id: string) {
     const res = await fetch(`/api/community/comments?id=${id}`, { method: "DELETE" });
-    if (res.ok) setComments((prev) => prev.filter((c) => c.id !== id));
+    const gone = res.status === 404 && res.headers.get("content-type")?.includes("application/json") === true;
+    if (res.ok || gone) setComments((prev) => prev.filter((c) => c.id !== id));
   }
 
   return (

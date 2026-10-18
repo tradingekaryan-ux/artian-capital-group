@@ -14,7 +14,8 @@ export function DeleteEventButton({ id }: { id: string }) {
     setBusy(true);
     try {
       const res = await fetch(`/api/events/${id}`, { method: "DELETE" });
-      if (res.ok) router.refresh();
+      const gone = res.status === 404 && res.headers.get("content-type")?.includes("application/json") === true;
+      if (res.ok || gone) router.refresh();
     } finally {
       setBusy(false);
     }

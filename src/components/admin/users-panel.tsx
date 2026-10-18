@@ -288,7 +288,8 @@ function UserDetailView({
     try {
       const res = await fetch(`/api/admin/users/${u.id}/wallet?walletId=${walletId}`, { method: "DELETE" });
       const j = await res.json().catch(() => ({}) as Record<string, unknown>);
-      if (!res.ok) throw new Error(String(j.error ?? "ERR"));
+      const gone = res.status === 404 && res.headers.get("content-type")?.includes("application/json") === true;
+      if (!res.ok && !gone) throw new Error(String(j.error ?? "ERR"));
       setOpsMsg(t("walletDeleted"));
       onRefresh();
     } catch (e) {
@@ -305,7 +306,8 @@ function UserDetailView({
     try {
       const res = await fetch(`/api/algos/${algoId}`, { method: "DELETE" });
       const j = await res.json().catch(() => ({}) as Record<string, unknown>);
-      if (!res.ok) throw new Error(String(j.error ?? "ERR"));
+      const gone = res.status === 404 && res.headers.get("content-type")?.includes("application/json") === true;
+      if (!res.ok && !gone) throw new Error(String(j.error ?? "ERR"));
       setOpsMsg(t("algoDeleted"));
       onRefresh();
     } catch (e) {

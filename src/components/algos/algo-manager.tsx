@@ -142,7 +142,8 @@ export function AlgoManager({ initialItems }: { initialItems: ManagedAlgo[] }) {
     setError(null);
     try {
       const res = await fetch(`/api/algos/${algoId}/hooks/${hookId}`, { method: "DELETE" });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const gone = res.status === 404 && res.headers.get("content-type")?.includes("application/json") === true;
+      if (!res.ok && !gone) throw new Error(`HTTP ${res.status}`);
       await loadDetail(algoId);
     } catch (e) {
       setError(e instanceof Error ? e.message : ta("errors.failed"));
@@ -156,7 +157,8 @@ export function AlgoManager({ initialItems }: { initialItems: ManagedAlgo[] }) {
     setError(null);
     try {
       const res = await fetch(`/api/algos/${algoId}/messages/${messageId}`, { method: "DELETE" });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const gone = res.status === 404 && res.headers.get("content-type")?.includes("application/json") === true;
+      if (!res.ok && !gone) throw new Error(`HTTP ${res.status}`);
       setMessages((prev) => ({
         ...prev,
         [algoId]: (prev[algoId] ?? []).filter((m) => m.id !== messageId),

@@ -158,7 +158,8 @@ export function AlgoView({
     setError(null);
     try {
       const res = await fetch(`/api/algos/${algo.id}/slots/${slotId}`, { method: "DELETE" });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const gone = res.status === 404 && res.headers.get("content-type")?.includes("application/json") === true;
+      if (!res.ok && !gone) throw new Error(`HTTP ${res.status}`);
       await loadSlots();
     } catch (e) {
       setError(e instanceof Error ? e.message : ta("errors.failed"));
@@ -172,7 +173,8 @@ export function AlgoView({
     setError(null);
     try {
       const res = await fetch(`/api/algos/${algo.id}/messages/${messageId}`, { method: "DELETE" });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const gone = res.status === 404 && res.headers.get("content-type")?.includes("application/json") === true;
+      if (!res.ok && !gone) throw new Error(`HTTP ${res.status}`);
       setMessages((prev) => prev.filter((m) => m.id !== messageId));
     } catch (e) {
       setError(e instanceof Error ? e.message : ta("errors.failed"));
