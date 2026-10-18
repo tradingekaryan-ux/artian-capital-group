@@ -115,15 +115,17 @@ export interface DiscordEmbed {
 }
 
 /**
- * Body POST ke URL slot — aman untuk receiver generik (postman, n8n, Zapier)
- * DAN tampil rapi di Discord (content + embeds + username + avatar).
- * `url` & `embeds` adalah field TAMBAHAN: penerima lama yang hanya membaca
- * `text`/`content` tetap berfungsi seperti sebelumnya.
+ * Body POST ke URL slot.
+ * - **Discord**: memakai `username` + `avatar_url` + `embeds` (tampilan rapi,
+ *   `content` sengaja dikosongkan agar kalimat tidak dobel).
+ * - **Receiver generik** (n8n/Zapier/postman): baca `text` (ringkasan + URL),
+ *   `url`, dan `data` (payload mentah apa adanya).
  */
 export interface WebhookEnvelope {
   event: string;
   slot: string;
   text: string;
+  /** Kosong di Discord — tampilan ada di `embeds`. */
   content: string;
   url: string;
   ts: string;
@@ -133,24 +135,24 @@ export interface WebhookEnvelope {
   embeds: DiscordEmbed[];
 }
 
-/** Warna embed per slot (palet brand: lime #d8ff3e + aksen). */
-const SLOT_STYLE: Record<WebhookSlot, { label: string; username: string; color: number }> = {
-  events: { label: "Event Tracker", username: "Artian · Event Tracker", color: 0x7c3aed },
-  tx: { label: "Transactions", username: "Artian · Transactions", color: 0x22c55e },
-  wallet: { label: "New wallet", username: "Artian · Wallets", color: 0x3b82f6 },
-  algo: { label: "New algo", username: "Artian · Algos", color: 0xd8ff3e },
-  user: { label: "New user", username: "Artian · Users", color: 0xf59e0b },
+/** Warna embed + nama pengirim per slot (palet brand: lime #d8ff3e + aksen). */
+const SLOT_STYLE: Record<WebhookSlot, { username: string; color: number }> = {
+  events: { username: "Artian · Event Tracker", color: 0x7c3aed },
+  tx: { username: "Artian · Transactions", color: 0x22c55e },
+  wallet: { username: "Artian · Wallets", color: 0x3b82f6 },
+  algo: { username: "Artian · Algos", color: 0xd8ff3e },
+  user: { username: "Artian · Users", color: 0xf59e0b },
 };
 
-/** Label title embed untuk slot `tx` (berdasar `data.subkind`). */
+/** Judul embed untuk slot `tx` (berdasar `data.subkind`) — pendek & jelas. */
 const TX_LABEL: Record<string, string> = {
   order_paid: "Order paid",
   withdrawal: "Withdrawal confirmed",
   algo_subscribe: "Algo subscription paid",
   treasury_deposit: "Treasury deposit",
   treasury_withdraw: "Treasury withdraw",
-  admin_wallet_topup: "Admin top-up user wallet",
-  admin_wallet_withdraw: "Admin withdraw user wallet",
+  admin_wallet_topup: "User wallet top-up",
+  admin_wallet_withdraw: "User wallet withdraw",
 };
 
 function siteBase(): string {
@@ -189,7 +191,11 @@ function primaryUrl(slot: WebhookSlot, data: Record<string, unknown>): string {
 /** Batas konten Discord 2000 char — sisakan ruang utk URL. */
 const CONTENT_LIMIT = 1900;
 
-/** Sisipkan URL ke teks (opsi gabungan) tanpa memotong URL-nya. */
+/**
+ * Sisipkan URL ke `text` utk receiver generik (n8n/Zapier/postman).
+ * Discord TIDAK memakai `text`/`content` — tampilan Discord = `embeds` saja,
+ * jadi kalimat ini tidak ikut tampil dobel di channel.
+ */
 function withUrl(text: string, url: string): string {
   if (!url) return text;
   if (text.includes(url)) return text;
@@ -199,26 +205,110 @@ function withUrl(text: string, url: string): string {
   return `${text.slice(0, room).trimEnd()} … ${url}`;
 }
 
-function str(data: Record<string, unknown>, key: string): string {
+/** Nilai primitif apa pun → string (object/array dianggap kosong). */
+function raw(data: Record<string, unknown>, key: string): string {
   const v = data[key];
-  return typeof v === "string" ? v : "";
+  if (v === null || v === undefined || typeof v === "object") return "";
+  return String(v).trim();
 }
 
 function humanize(key: string): string {
   return key.replace(/([a-z0-9])([A-Z])/g, "$1 $2").replace(/^./, (c) => c.toUpperCase());
 }
 
-/** Object/array/null dilewati — field embed hanya nilai primitif (maks 10). */
-function fieldsFrom(data: Record<string, unknown>, skip: string[]): DiscordEmbedField[] {
-  const out: DiscordEmbedField[] = [];
-  for (const [key, value] of Object.entries(data)) {
-    if (skip.includes(key) || value === null || value === undefined) continue;
-    if (typeof value === "object") continue;
-    const raw = String(value);
-    if (!raw) continue;
-    out.push({ name: humanize(key), value: raw.slice(0, 1024), inline: true });
-    if (out.length >= 10) break;
+/**
+ * Ringkas nilai panjang agar enak dibaca sekilas di Discord:
+ * pubkey/signature base58 → `5cG1oj5…Fg361`, UUID → `b02d2677`, sisanya potong 40 char.
+ */
+function short(value: string): string {
+  if (/^[1-9A-HJ-NP-Za-km-z]{32,}$/.test(value)) return `${value.slice(0, 8)}…${value.slice(-6)}`;
+  if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value)) {
+    return value.slice(0, 8);
   }
+  return value.length > 40 ? `${value.slice(0, 39)}…` : value;
+}
+
+/** Label nama field embed. */
+const FIELD_LABEL: Record<string, string> = {
+  amount: "Amount",
+  asset: "Asset",
+  orderId: "Order",
+  sig: "Tx",
+  tx: "Tx",
+  userId: "User",
+  algoName: "Algo",
+  publicKey: "Public key",
+  label: "Label",
+  email: "Email",
+  username: "Username",
+  priceUsdc: "Price",
+  billing: "Billing",
+};
+
+/**
+ * Key yang ditampilkan per slot `tx`, diurutkan dari yang paling penting,
+ * maksimal 3 baris. `subkind`/`actor`/`walletId` sengaja dibuang — sudah ada
+ * di title dan tidak berguna utk pembaca manusia.
+ */
+const TX_FIELD_KEYS: Record<string, string[]> = {
+  order_paid: ["amount", "asset", "orderId", "sig"],
+  withdrawal: ["amount", "asset", "userId", "sig"],
+  algo_subscribe: ["amount", "asset", "algoName", "sig"],
+  treasury_deposit: ["amount", "asset", "sig"],
+  treasury_withdraw: ["amount", "asset", "sig"],
+  admin_wallet_topup: ["userId", "amount", "asset", "tx"],
+  admin_wallet_withdraw: ["userId", "amount", "asset", "tx"],
+};
+
+/** Field embed per slot selain `tx` — hanya info yang berguna utk pembaca. */
+const SLOT_FIELD_KEYS: Record<WebhookSlot, string[]> = {
+  events: [], // caption = deskripsi embed; link = judul embed
+  tx: [],
+  wallet: ["publicKey"],
+  algo: ["priceUsdc", "billing"],
+  user: ["email", "username"],
+};
+
+/**
+ * Label dompet yang cuma turunan `kind` ("Demo (Devnet)", "Mainnet") = noise —
+ * sudah terbaca di judul. Label kustom ("Bot trading") tetap ditampilkan.
+ */
+function isDefaultLabel(kind: string, label: string): boolean {
+  if (!label) return true;
+  if (new RegExp(`^${kind || "mainnet"}\\b`, "i").test(label)) return true;
+  return kind === "demo" ? /devnet/i.test(label) : /mainnet/i.test(label);
+}
+
+/** Ambil field sesuai allowlist; `amount`+`asset` digabung jadi satu baris. */
+function pickFields(data: Record<string, unknown>, keys: string[], max = 3): DiscordEmbedField[] {
+  const out: DiscordEmbedField[] = [];
+  const usedAsset = { done: false };
+
+  for (const key of keys) {
+    if (out.length >= max) break;
+    if (key === "asset" && usedAsset.done) continue;
+
+    let name: string;
+    let value: string;
+
+    if (key === "amount") {
+      name = "Amount";
+      const amount = raw(data, "amount");
+      const asset = raw(data, "asset");
+      if (asset) usedAsset.done = true;
+      value = [amount, asset.toUpperCase()].filter(Boolean).join(" ");
+    } else if (key === "priceUsdc") {
+      name = "Price";
+      value = raw(data, "priceUsdc") ? `${raw(data, "priceUsdc")} USDC` : "";
+    } else {
+      name = FIELD_LABEL[key] ?? humanize(key);
+      value = raw(data, key);
+    }
+
+    if (!value) continue;
+    out.push({ name, value: short(value).slice(0, 1024), inline: true });
+  }
+
   return out;
 }
 
@@ -227,19 +317,22 @@ function titleFor(slot: WebhookSlot, data: Record<string, unknown>): string {
     case "events":
       return "New event posted";
     case "algo":
-      return str(data, "name") ? `New algo: ${str(data, "name").slice(0, 200)}` : "New algo published";
+      return raw(data, "name") ? `New algo: ${raw(data, "name").slice(0, 200)}` : "New algo published";
     case "wallet":
-      return `New ${str(data, "kind") || "mainnet"} wallet created`;
+      return `${raw(data, "kind") === "demo" ? "Demo" : "Mainnet"} wallet created`;
     case "user":
       return "New user registered";
     case "tx":
-      return TX_LABEL[str(data, "subkind")] ?? "Transaction";
+      return TX_LABEL[raw(data, "subkind")] ?? "Transaction";
   }
 }
 
 /**
- * Bentuk body POST final. Urutan field disengaja agar receiver generik tetap
- * membaca `text`/`content` persis seperti versi lama (kini + URL di belakangnya).
+ * Bentuk body POST final — DIRANCANG UNTUK DISCORD LEBIH DULU:
+ * - `content` = `""` → Discord menampilkan `embeds` saja (tidak ada kalimat dobel).
+ * - `embeds` = judul (bisa diklik ke `url`) + deskripsi (hanya utk caption event)
+ *   + maks 3 field penting + timestamp. Tanpa footer (username sudah menyebut slot).
+ * - `text` + `url` + `data` tetap utuh utk receiver generik (n8n/Zapier/postman).
  */
 export function buildWebhookEnvelope(input: {
   slot: WebhookSlot;
@@ -252,26 +345,27 @@ export function buildWebhookEnvelope(input: {
   const style = SLOT_STYLE[input.slot];
   const url = primaryUrl(input.slot, data);
   const text = withUrl(input.text, url);
+  const ts = input.ts ?? new Date().toISOString();
 
-  // Caption event penuh (tidak dipotong 140) utk deskripsi embed.
-  const description =
-    input.slot === "events" && str(data, "caption") ? str(data, "caption").slice(0, 4096) : text.slice(0, 4096);
+  // Deskripsi embed: hanya caption event (itu memang teks panjang yg dibaca orang).
+  const caption = raw(data, "caption").slice(0, 280);
+  const description = caption ? (raw(data, "caption").length > 280 ? `${caption}…` : caption) : "";
 
-  const fields = fieldsFrom(
-    data,
-    input.slot === "events" ? ["url", "caption"] : input.slot === "algo" ? ["name"] : [],
-  );
-  if (input.slot === "events" && str(data, "url")) {
-    fields.unshift({ name: "Post", value: str(data, "url").slice(0, 1024), inline: false });
-  }
+  const keys =
+    input.slot === "tx"
+      ? (TX_FIELD_KEYS[raw(data, "subkind")] ?? ["amount", "asset", "sig"])
+      : input.slot === "wallet" && !isDefaultLabel(raw(data, "kind"), raw(data, "label"))
+        ? [...SLOT_FIELD_KEYS.wallet, "label"]
+        : SLOT_FIELD_KEYS[input.slot];
+  const fields = pickFields(data, keys);
 
   return {
     event: input.kind,
     slot: input.slot,
     text,
-    content: text,
+    content: "",
     url,
-    ts: input.ts ?? new Date().toISOString(),
+    ts,
     data,
     username: style.username,
     avatar_url: `${siteBase()}/icon.png`,
@@ -279,11 +373,10 @@ export function buildWebhookEnvelope(input: {
       {
         title: titleFor(input.slot, data).slice(0, 256),
         url,
-        description,
+        ...(description ? { description } : {}),
         color: style.color,
         ...(fields.length ? { fields } : {}),
-        footer: { text: `Artian Capital Group · ${style.label}` },
-        timestamp: input.ts ?? new Date().toISOString(),
+        timestamp: ts,
       },
     ],
   };

@@ -818,9 +818,9 @@ async function handleAlgoForward(payload: Record<string, unknown>): Promise<void
 /**
  * Kirim payload JSON ke URL slot (dibaca ulang dari pricing_config saat
  * eksekusi; slot di-clear → skip). Body dibentuk `buildWebhookEnvelope`:
- * {event, slot, text(+URL), content(+URL), url, ts, data, username,
- *  avatar_url, embeds} — `content`/`embeds`/`username` = styling Discord,
- * receiver generik tetap membaca `text`/`content`.
+ * {event, slot, text(+URL), content:"", url, ts, data, username, avatar_url,
+ *  embeds} — Discord merender `embeds` (judul klik-able + maks3 field penting
+ * + timestamp, tanpa kalimat dobel); receiver generik baca `text` & `url`.
  * Gagal (network / non-2xx) → throw → retry backoff30s×3 seperti job lain.
  */
 async function handleWebhookAlert(payload: Record<string, unknown>): Promise<void> {

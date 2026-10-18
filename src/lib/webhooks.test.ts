@@ -3,8 +3,10 @@ import { SITE } from "@/lib/config";
 import { buildWebhookEnvelope } from "@/lib/webhooks";
 
 const base = SITE.url.replace(/\/+$/, "");
+const PUBKEY = "5cG1oj5wRoqyzuRoHhMMwFkg325rfQL3ic1X13Fg361";
+const USER_ID = "b02d2677-25e2-4e90-b45d-b224d7f3536a";
 
-describe("buildWebhookEnvelope — events", () => {
+describe("buildWebhookEnvelope — Discord tanpa kalimat dobel", () => {
   const post = "https://x.com/artian/status/1234567890";
   const caption =
     "Giveaway mingguan! Retweet post ini, join Discord, dan menangkan 10 USDC — syarat & ketentuan berlaku, ditutup Jumat 18:00 WITA.";
@@ -16,101 +18,157 @@ describe("buildWebhookEnvelope — events", () => {
     ts: "2026-10-18T12:00:00.000Z",
   });
 
-  it("URL post ikut di text/content (opsi gabungan)", () => {
-    expect(env.content).toContain(post);
-    expect(env.content).toBe(env.text);
-    expect(env.content.startsWith("New event posted:")).toBe(true);
+  it("content kosong — Discord cukup render embeds", () => {
+    expect(env.content).toBe("");
+  });
+
+  it("text utk receiver generik tetap lengkap (ringkasan + URL)", () => {
+    expect(env.text.startsWith("New event posted:")).toBe(true);
+    expect(env.text).toContain(post);
+    expect(env.event).toBe("event_created");
+    expect(env.slot).toBe("events");
   });
 
   it("URL top-level + data.url tetap utuh", () => {
     expect(env.url).toBe(post);
     expect(env.data.url).toBe(post);
-    expect(env.event).toBe("event_created");
-    expect(env.slot).toBe("events");
     expect(env.ts).toBe("2026-10-18T12:00:00.000Z");
   });
 
-  it("caption penuh (tanpa potongan 140) jadi deskripsi embed", () => {
+  it("embed: judul bisa diklik, caption jadi deskripsi (dipotong 280)", () => {
     expect(env.embeds).toHaveLength(1);
-    expect(env.embeds[0].description).toBe(caption);
     expect(env.embeds[0].title).toBe("New event posted");
     expect(env.embeds[0].url).toBe(post);
+    expect(env.embeds[0].description).toBe(caption); // < 280 → utuh
+    // tanpa field sampah (link sudah jadi judul, caption sudah jadi deskripsi)
+    expect(env.embeds[0].fields).toBeUndefined();
   });
 
-  it("styling Discord: color, footer, timestamp, username, avatar, field Post", () => {
+  it("styling: color, timestamp, username, avatar — tanpa footer", () => {
     expect(env.embeds[0].color).toBe(0x7c3aed);
-    expect(env.embeds[0].footer?.text).toBe("Artian Capital Group · Event Tracker");
     expect(env.embeds[0].timestamp).toBe("2026-10-18T12:00:00.000Z");
     expect(env.username).toBe("Artian · Event Tracker");
     expect(env.avatar_url).toBe(`${base}/icon.png`);
-    expect(env.embeds[0].fields?.[0]).toEqual({ name: "Post", value: post, inline: false });
-    // caption tidak diulang sebagai field (sudah jadi deskripsi)
-    expect(env.embeds[0].fields?.some((f) => f.name === "Caption")).toBe(false);
+    expect(env.embeds[0]).not.toHaveProperty("footer");
   });
 });
 
-describe("buildWebhookEnvelope — URL utama per slot", () => {
-  it("tx order_paid → panel admin", () => {
+describe("buildWebhookEnvelope — field disaring (hanya yang penting)", () => {
+  it("wallet: hanya Public key (diringkas); label default dibuang, label kustom tampil", () => {
     const env = buildWebhookEnvelope({
-      slot: "tx",
-      kind: "transaction",
-      text: "Order paid: create_token 2.00 USDC (mainnet) — tx 5AbCdEfGhIjKlMn…",
-      data: { subkind: "order_paid", orderId: 42 },
+      slot: "wallet",
+      kind: "wallet_created",
+      text: `New demo wallet created: ${PUBKEY}`,
+      data: { kind: "demo", label: "Demo (Devnet)", publicKey: PUBKEY, userId: USER_ID },
     });
-    expect(env.url).toBe(`${base}/admin`);
-    expect(env.content.endsWith(env.url)).toBe(true);
-    expect(env.embeds[0].title).toBe("Order paid");
+    expect(env.embeds[0].title).toBe("Demo wallet created");
+    expect(env.embeds[0].description).toBeUndefined(); // tidak mengulang teks
+    const fields = env.embeds[0].fields ?? [];
+    expect(fields.map((f) => f.name)).toEqual(["Public key"]); // Label "Demo (Devnet)" = turunan kind
+    expect(fields[0].value).toBe("5cG1oj5w…3Fg361"); // base58 dipotong
+    expect(JSON.stringify(fields)).not.toContain(USER_ID); // UUID dibuang
+
+    const named = buildWebhookEnvelope({
+      slot: "wallet",
+      kind: "wallet_created",
+      text: "New wallet",
+      data: { kind: "mainnet", label: "Bot trading", publicKey: PUBKEY },
+    });
+    expect(named.embeds[0].fields?.map((f) => `${f.name}=${f.value}`)).toEqual([
+      "Public key=5cG1oj5w…3Fg361",
+      "Label=Bot trading",
+    ]);
   });
 
-  it("tx algo_subscribe → halaman publik algo", () => {
+  it("user: hanya Email + Username, tanpa User Id", () => {
     const env = buildWebhookEnvelope({
-      slot: "tx",
-      kind: "transaction",
-      text: 'Algo subscription paid: "Scalper X" 5.00 USDC (monthly)',
-      data: { subkind: "algo_subscribe", algoId: "algo-9" },
+      slot: "user",
+      kind: "user_registered",
+      text: "New user: a@b.c",
+      data: { email: "budi@mail.com", username: "budi", userId: USER_ID },
     });
+    expect(env.embeds[0].title).toBe("New user registered");
+    expect(env.embeds[0].fields?.map((f) => `${f.name}=${f.value}`)).toEqual([
+      "Email=budi@mail.com",
+      "Username=budi",
+    ]);
+  });
+
+  it("algo: judul memuat nama, field Price + Billing", () => {
+    const env = buildWebhookEnvelope({
+      slot: "algo",
+      kind: "algo_created",
+      text: "New algo: Scalper X",
+      data: { algoId: "algo-9", name: "Scalper X", priceUsdc: 5, billing: "monthly" },
+    });
+    expect(env.embeds[0].title).toBe("New algo: Scalper X");
     expect(env.url).toBe(`${base}/algos/algo-9`);
-    expect(env.embeds[0].title).toBe("Algo subscription paid");
+    expect(env.embeds[0].fields?.map((f) => `${f.name}=${f.value}`)).toEqual([
+      "Price=5 USDC",
+      "Billing=monthly",
+    ]);
   });
 
-  it("tx treasury_* → tab revenue; admin_wallet_* → daftar user", () => {
+  it("tx: amount+asset digabung 1 baris, subkind & actor dibuang, maks 3 field", () => {
+    const SIG = "3yS7Qm9WzXe2KdP4Rf8UvNc6JhL5GtAbDeMqYwZxCvBnHp"; // base58 valid
+    const env = buildWebhookEnvelope({
+      slot: "tx",
+      kind: "transaction",
+      text: "Order paid: create_token 2.00 USDC (mainnet)",
+      data: {
+        subkind: "order_paid",
+        orderId: 42,
+        amount: "2.00",
+        asset: "usdc",
+        sig: SIG,
+        actor: "admin-id",
+      },
+    });
+    expect(env.embeds[0].title).toBe("Order paid");
+    expect(env.embeds[0].fields?.map((f) => `${f.name}=${f.value}`)).toEqual([
+      "Amount=2.00 USDC",
+      "Order=42",
+      `Tx=${SIG.slice(0, 8)}…${SIG.slice(-6)}`,
+    ]);
+    expect(env.url).toBe(`${base}/admin`);
+  });
+
+  it("tx treasury_* → /admin/revenue; admin_wallet_* → /admin/users", () => {
     expect(
       buildWebhookEnvelope({
         slot: "tx",
         kind: "transaction",
         text: "Treasury deposit: 10 USDC",
-        data: { subkind: "treasury_deposit" },
+        data: { subkind: "treasury_deposit", amount: "10.00", asset: "usdc" },
       }).url,
     ).toBe(`${base}/admin/revenue`);
     expect(
       buildWebhookEnvelope({
         slot: "tx",
         kind: "transaction",
-        text: "Admin topup: 5 USDC → user wallet",
-        data: { subkind: "admin_wallet_topup" },
+        text: "Admin topup: 5 USDC",
+        data: { subkind: "admin_wallet_topup", userId: USER_ID, amount: "5.00", asset: "usdc" },
       }).url,
     ).toBe(`${base}/admin/users`);
   });
 
-  it("wallet & user → daftar user admin; tanpa data → tetap ber-link", () => {
-    expect(
-      buildWebhookEnvelope({ slot: "wallet", kind: "wallet_created", text: "New wallet: AbC…", data: { kind: "demo" } })
-        .url,
-    ).toBe(`${base}/admin/users`);
-    expect(
-      buildWebhookEnvelope({ slot: "user", kind: "user_registered", text: "New user: a@b.c", data: {} }).url,
-    ).toBe(`${base}/admin/users`);
-  });
-
-  it("events tanpa data.url → fallback halaman /events", () => {
-    expect(buildWebhookEnvelope({ slot: "events", kind: "event_created", text: "x", data: {} }).url).toBe(
-      `${base}/events`,
-    );
+  it("tx algo_subscribe → halaman publik algo + nama algo di field", () => {
+    const env = buildWebhookEnvelope({
+      slot: "tx",
+      kind: "transaction",
+      text: 'Algo subscription paid: "Scalper X" 5.00 USDC',
+      data: { subkind: "algo_subscribe", algoId: "algo-9", algoName: "Scalper X", amount: "5.00", asset: "usdc" },
+    });
+    expect(env.url).toBe(`${base}/algos/algo-9`);
+    expect(env.embeds[0].fields?.map((f) => `${f.name}=${f.value}`)).toEqual([
+      "Amount=5.00 USDC",
+      "Algo=Scalper X",
+    ]);
   });
 });
 
-describe("buildWebhookEnvelope — batas & field embed", () => {
-  it("content tidak pernah melebihi 2000 char (Discord), URL tetap utuh", () => {
+describe("buildWebhookEnvelope — batas & URL utama", () => {
+  it("text tidak pernah melebihi 2000 char (Discord), URL tetap utuh", () => {
     const post = "https://example.com/very/long/post/url/with/path?query=1";
     const long = "word ".repeat(700); // ~3500 char
     const env = buildWebhookEnvelope({
@@ -119,32 +177,47 @@ describe("buildWebhookEnvelope — batas & field embed", () => {
       text: `New event posted: ${long}`,
       data: { url: post, caption: long },
     });
-    expect(env.content.length).toBeLessThanOrEqual(2000);
-    expect(env.content.endsWith(post)).toBe(true);
+    expect(env.content).toBe("");
+    expect(env.text.length).toBeLessThanOrEqual(2000);
+    expect(env.text.endsWith(post)).toBe(true);
     expect(env.data.url).toBe(post); // data tidak ikut dipotong
-    expect(env.text).toBe(env.content);
+    expect((env.embeds[0].description ?? "").length).toBeLessThanOrEqual(281); // caption dipotong 280 + …
   });
 
-  it("hanya nilai primitif yang jadi field; object dilewati, key di-humanize", () => {
+  it("URL utama events tanpa data.url → fallback halaman /events", () => {
+    expect(buildWebhookEnvelope({ slot: "events", kind: "event_created", text: "x", data: {} }).url).toBe(
+      `${base}/events`,
+    );
+  });
+
+  it("wallet & user → /admin/users; nilai object tidak pernah jadi field", () => {
+    const env = buildWebhookEnvelope({
+      slot: "wallet",
+      kind: "wallet_created",
+      text: "New wallet",
+      data: { kind: "mainnet", nested: { a: 1 }, list: [1, 2] },
+    });
+    expect(env.url).toBe(`${base}/admin/users`);
+    expect(env.embeds[0].title).toBe("Mainnet wallet created");
+    // tanpa label & tanpa key di luar allowlist → tidak ada field sama sekali
+    expect(env.embeds[0].fields).toBeUndefined();
+  });
+
+  it("field selalu ≤3 dan nilai ≤1024 char", () => {
     const env = buildWebhookEnvelope({
       slot: "tx",
       kind: "transaction",
-      text: "Order paid: 2 USDC",
-      data: { subkind: "order_paid", orderId: 7, nested: { a: 1 }, list: [1, 2] },
+      text: "t",
+      data: {
+        subkind: "admin_wallet_topup",
+        userId: "x".repeat(200),
+        amount: "1",
+        asset: "usdc",
+        tx: "y".repeat(2000),
+      },
     });
-    const names = (env.embeds[0].fields ?? []).map((f) => f.name);
-    expect(names).toContain("Subkind");
-    expect(names).toContain("Order Id");
-    expect(names).not.toContain("Nested");
-    expect(names).not.toContain("List");
-  });
-
-  it("field embed maksimal 10 entri dan nilai dipotong 1024 char", () => {
-    const data: Record<string, unknown> = {};
-    for (let i = 0; i < 14; i++) data[`key${i}`] = "x".repeat(1200);
-    const env = buildWebhookEnvelope({ slot: "tx", kind: "transaction", text: "t", data });
     const fields = env.embeds[0].fields ?? [];
-    expect(fields).toHaveLength(10);
+    expect(fields.length).toBeLessThanOrEqual(3);
     expect(fields.every((f) => f.value.length <= 1024)).toBe(true);
   });
 });
