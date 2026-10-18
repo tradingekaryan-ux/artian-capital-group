@@ -182,6 +182,10 @@ algo_subscriptions(id uuid pk, algo_id, user_id→profiles, status check in (act
       starts_at, expires_at null=lifetime, created_at)
 algo_slots(id uuid pk, algo_id, user_id, dest_url, active bool, last_status, last_delivered_at, created_at)
 -- jobs.type ditambah 'algo_forward' (retry forward feed→slot; constraint di-drop/re-add)
+
+-- 0009: event tracker (admin posting URL + caption; meta = preview kartu)
+events(id uuid pk, url text, caption text, meta jsonb default '{}',
+       created_by uuid→profiles, created_at, index (created_at desc))
 ```
 
 **RLS wajib:** semua tabel user-scoped memakai policy `auth.uid() = user_id`; tabel publik (`tokens`, `price_snapshots`, `comments`) dibaca publik, tulis hanya lewat service role (server) — bukan anon key.
@@ -216,6 +220,9 @@ algo_slots(id uuid pk, algo_id, user_id, dest_url, active bool, last_status, las
 | `GET/POST /api/algos/[id]/hooks` · `DELETE …/hooks/[hookId]` | CRUD token input (maks 5, owner) | session |
 | `GET/POST /api/algos/[id]/slots` · `DELETE …/slots/[slotId]` | slot output subscriber (maks 3; wajib sub aktif; SSRF guard) | session |
 | `DELETE /api/algos/[id]/messages/[messageId]` | hapus message (owner/admin) | session |
+| `GET /api/events` | daftar event publik (urut terbaru, limit100) | publik |
+| `POST /api/events` | admin posting URL + caption; meta card diambil server-side (oEmbed X / og-tags, timeout4s, SSRF guard) | role admin + rate limit |
+| `DELETE /api/events/[id]` | hapus event | role admin |
 | `POST /api/cron/run-jobs` | trigger manual worker (cadangan di luar GH Actions) | `Bearer CRON_SECRET` |
 
 **Catatan penting vs rencana awal:**
@@ -287,7 +294,7 @@ algo_slots(id uuid pk, algo_id, user_id, dest_url, active bool, last_status, las
 | Unit (tertunda) | Vitest | enkripsi AES-GCM, state machine order, validasi input |
 | Integration (tertunda) | Vitest + mock RPC | token-create tx builder (assert instruksi), withdrawal flow |
 | E2E manual (tertunda) | `scripts/devnet-smoke.ts` | topup→create token→pool→swap→withdraw di devnet |
-| E2E live ✅ | `scripts/e2e-admin-test.py` + `scripts/e2e-algo-test.py` | sesi magiclink→cookie SSR: admin wallet/treasury (12 cek, termasuk branch tolak preflight) & **algo marketplace** (50 cek: feed publik, CRUD algo/hook, subscribe free instan, preflight bayar 402, SSRF slot, limit3, job `algo_forward`, moderasi, pause) — keduanya lulus penuh di live |
+| E2E live ✅ | `scripts/e2e-admin-test.py` + `scripts/e2e-algo-test.py` | sesi magiclink→cookie SSR: admin wallet/treasury (12 cek) & **algo marketplace** (50 cek) — lulus penuh di live; smoke terpisah **events+landing+nav 19/19** (hero/blok fitur baru, urut nav Algos→Create→Explore→Events, CRUD event admin + og-meta, SSRF/caption guard) |
 | CI ✅ | GitHub Actions `ci.yml` | `lint`, `test`, `typecheck` (`next typegen && tsc`), `build` tiap push/PR — Node 22 |
 | Post-deploy | worker cron tiap menit | sentuh DB tiap menit (de facto heartbeat, PRD §10 R5) + jalankan job siklis `price_snapshot` |
 

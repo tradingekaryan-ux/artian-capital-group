@@ -18,11 +18,17 @@ export function Footer() {
         </div>
         <p className="max-w-md text-xs leading-relaxed text-white/60">{t("disclaimer")}</p>
         <div className="flex gap-5 text-xs font-bold uppercase tracking-wide">
-          <Link href="/explore" className="text-white hover:text-[#d8ff3e]">
-            Explore
+          <Link href="/algos" className="text-white hover:text-[#d8ff3e]">
+            Algos
           </Link>
           <Link href="/create" className="text-white hover:text-[#d8ff3e]">
             Create
+          </Link>
+          <Link href="/explore" className="text-white hover:text-[#d8ff3e]">
+            Explore
+          </Link>
+          <Link href="/events" className="text-white hover:text-[#d8ff3e]">
+            Events
           </Link>
         </div>
       </div>

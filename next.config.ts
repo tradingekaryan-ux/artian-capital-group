@@ -73,6 +73,8 @@ const nextConfig: NextConfig = {
         { source: "/explore/:path*", destination: "/en/explore/:path*" },
         { source: "/algos", destination: "/en/algos" },
         { source: "/algos/:path*", destination: "/en/algos/:path*" },
+        { source: "/events", destination: "/en/events" },
+        { source: "/events/:path*", destination: "/en/events/:path*" },
         { source: "/dashboard", destination: "/en/dashboard" },
         { source: "/dashboard/:path*", destination: "/en/dashboard/:path*" },
         { source: "/token/:path*", destination: "/en/token/:path*" },

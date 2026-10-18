@@ -9,6 +9,8 @@ export default async function LandingPage({ params }: PageProps<"/[locale]">) {
   const t = await getTranslations("landing");
 
   const stats = await fetchStats();
+  const createBullets = t.raw("createBullets") as string[];
+  const algoBullets = t.raw("algoBullets") as string[];
 
   return (
     <div className="flex flex-col gap-16">
@@ -18,11 +20,11 @@ export default async function LandingPage({ params }: PageProps<"/[locale]">) {
           Solana · USDC · zero infra fees
         </p>
         <h1 className="mx-auto max-w-4xl text-4xl leading-[0.95] sm:text-6xl lg:text-7xl">
-          <span className="hl">Launch your</span>
+          <span className="hl">Launch tokens,</span>
           <br />
-          <span className="hl hl-lime">Solana token</span>
+          <span className="hl hl-lime">trade smarter with algos</span>
           <br />
-          <span className="hl">in one place</span>
+          <span className="hl">on Solana</span>
         </h1>
         <p className="mx-auto mt-7 max-w-2xl text-base font-medium text-white/90 sm:text-lg">
           {t("heroSubtitle")}
@@ -31,8 +33,8 @@ export default async function LandingPage({ params }: PageProps<"/[locale]">) {
           <Link href="/create" className="btn btn-primary !px-8 !py-3.5 !text-sm">
             {t("ctaCreate")} →
           </Link>
-          <Link href="/explore" className="btn btn-dark !px-8 !py-3.5 !text-sm">
-            {t("ctaExplore")}
+          <Link href="/algos" className="btn btn-dark !px-8 !py-3.5 !text-sm">
+            {t("ctaAlgos")} →
           </Link>
         </div>
 
@@ -43,26 +45,38 @@ export default async function LandingPage({ params }: PageProps<"/[locale]">) {
         </dl>
       </section>
 
-      <section className="grid gap-5 sm:grid-cols-2">
-        <Feature
+      <section className="grid gap-5 lg:grid-cols-2">
+        <FeatureBlock
           index="01"
-          title={t("featureTokenTitle")}
-          body={t("featureTokenBody")}
+          title={t("createTitle")}
+          body={t("createBody")}
+          bullets={createBullets}
+          actions={
+            <>
+              <Link href="/create" className="btn btn-primary">
+                {t("ctaCreate")} →
+              </Link>
+              <Link href="/explore" className="btn btn-dark">
+                {t("ctaExplore")}
+              </Link>
+            </>
+          }
         />
-        <Feature
+        <FeatureBlock
           index="02"
-          title={t("featurePoolTitle")}
-          body={t("featurePoolBody")}
-        />
-        <Feature
-          index="03"
-          title={t("featureMarketTitle")}
-          body={t("featureMarketBody")}
-        />
-        <Feature
-          index="04"
-          title={t("featureWalletTitle")}
-          body={t("featureWalletBody")}
+          title={t("algoTitle")}
+          body={t("algoBody")}
+          bullets={algoBullets}
+          actions={
+            <>
+              <Link href="/algos" className="btn btn-primary">
+                {t("ctaBrowseAlgos")} →
+              </Link>
+              <Link href="/dashboard/algos" className="btn btn-dark">
+                {t("ctaPublishAlgo")}
+              </Link>
+            </>
+          }
         />
       </section>
     </div>
@@ -88,14 +102,18 @@ function Stat({ label, value }: { label: string; value: string }) {
   );
 }
 
-function Feature({
+function FeatureBlock({
   index,
   title,
   body,
+  bullets,
+  actions,
 }: {
   index: string;
   title: string;
   body: string;
+  bullets: string[];
+  actions: React.ReactNode;
 }) {
   return (
     <div className="card overflow-hidden">
@@ -107,9 +125,22 @@ function Feature({
         </span>
         <span className="text-muted-ink">{index}</span>
       </div>
-      <div className="p-6">
-        <h3 className="display text-xl">{title}</h3>
-        <p className="mt-3 text-sm leading-relaxed text-muted-ink">{body}</p>
+      <div className="flex h-full flex-col gap-4 p-6">
+        <div>
+          <h3 className="display text-2xl">{title}</h3>
+          <p className="mt-3 text-sm leading-relaxed text-muted-ink">{body}</p>
+        </div>
+        <ul className="flex flex-col gap-2.5">
+          {bullets.map((b) => (
+            <li key={b} className="flex gap-2.5 text-sm font-semibold">
+              <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2 border-black bg-[#d8ff3e] text-[10px] font-black">
+                ✓
+              </span>
+              <span>{b}</span>
+            </li>
+          ))}
+        </ul>
+        <div className="mt-auto flex flex-wrap gap-3 pt-2">{actions}</div>
       </div>
     </div>
   );

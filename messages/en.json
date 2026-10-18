@@ -1,6 +1,6 @@
 {
   "nav": {
-    "explore": "Explore",
+    "explore": "Explore Token",
     "create": "Create Token",
     "dashboard": "Dashboard",
     "login": "Log in",
@@ -10,7 +10,8 @@
     "orders": "Orders",
     "myTokens": "My Tokens",
     "admin": "Admin",
-    "algos": "Algos"
+    "algos": "Algos",
+    "events": "Event Tracker"
   },
   "common": {
     "appName": "Artian Capital Group",
@@ -29,21 +30,31 @@
     "disclaimer": "Artian is a tooling platform, not an investment advisor. Crypto tokens are high risk and on-chain transactions are irreversible."
   },
   "landing": {
-    "heroTitle": "Launch your Solana token — all in one place",
-    "heroSubtitle": "Create a token, set up its liquidity pool, and track live market data. No wallet setup, no juggling five tabs. Pay in USDC, withdraw anytime.",
+    "heroSubtitle": "Two ways to start on Solana: launch your own token with liquidity in minutes, or subscribe to signal algos and forward them to your community. Pay in USDC — no infrastructure fees.",
     "ctaCreate": "Create a token",
-    "ctaExplore": "Explore tokens",
     "statTokens": "Tokens launched",
     "statUsers": "Creators",
     "statTvl": "Total liquidity",
-    "featureTokenTitle": "Token launcher",
-    "featureTokenBody": "Name, symbol, supply, logo and metadata — live on Solana in minutes. Mint & freeze authority stay with you.",
-    "featurePoolTitle": "Liquidity pool builder",
-    "featurePoolBody": "Decide what percentage of supply goes to the pool and what stays for the market. Add or drain liquidity without leaving the site.",
-    "featureMarketTitle": "Live market data",
-    "featureMarketBody": "Every token gets its own profile page with price, chart, liquidity, volume and stats — automatically.",
-    "featureWalletTitle": "USDC wallet, built-in",
-    "featureWalletBody": "A Solana wallet is created for you. Top up USDC, pay for services, and withdraw back to any address."
+    "ctaAlgos": "Browse algos",
+    "createTitle": "Token Launcher",
+    "createBody": "Name, symbol, supply, logo and metadata — from a guided wizard to a live Solana token in minutes.",
+    "createBullets": [
+      "Token + on-chain metadata live in minutes — mint & freeze authority stay with you",
+      "Liquidity pool set up automatically, tune LP% with a slider",
+      "Fees paid in USDC; network gas comes from your built-in wallet",
+      "Every token gets a profile page with chart, stats and comments"
+    ],
+    "ctaExplore": "Explore tokens",
+    "algoTitle": "Algo Marketplace",
+    "algoBody": "Publish your trading signals as an algo — free or paid — and let subscribers receive every signal automatically.",
+    "algoBullets": [
+      "Anyone can publish: free, one-time lifetime, or monthly USDC subscriptions",
+      "Public signal feed — everyone sees it, subscribers unlock output slots",
+      "Auto-forward signals to Discord or any HTTP webhook, with retries",
+      "Flat platform commission per payment, set transparently by the admin"
+    ],
+    "ctaBrowseAlgos": "Browse algos",
+    "ctaPublishAlgo": "Publish your algo"
   },
   "auth": {
     "loginTitle": "Welcome back",
@@ -426,5 +437,23 @@
       "ownAlgo": "You cannot subscribe to your own algo.",
       "already": "Already subscribed."
     }
+  },
+  "events": {
+    "title": "Event Tracker",
+    "subtitle": "Announcements, community posts and highlights — every link in one place.",
+    "empty": "No events yet.",
+    "formTitle": "Post an event",
+    "url": "Post URL",
+    "urlPlaceholder": "https://x.com/… or any link",
+    "caption": "Caption (optional)",
+    "captionPlaceholder": "What is this about?",
+    "post": "Post",
+    "posting": "Posting…",
+    "visit": "Open link",
+    "delete": "Delete",
+    "deleteConfirm": "Delete this event?",
+    "failed": "Something went wrong.",
+    "badgeX": "Post on X",
+    "badgeWeb": "Link"
   }
 }

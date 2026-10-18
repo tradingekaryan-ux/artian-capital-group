@@ -34,14 +34,6 @@ export function Nav() {
           </Link>
           <nav className="hidden items-center gap-1 text-[13px] font-bold uppercase tracking-wide text-white/90 sm:flex">
             <Link
-              href="/explore"
-              className={`rounded-full border-2 border-transparent px-3 py-1 transition-colors hover:border-[#d8ff3e] hover:text-[#d8ff3e] ${
-                pathname === "/explore" ? "border-[#d8ff3e] text-[#d8ff3e]" : ""
-              }`}
-            >
-              {t("explore")}
-            </Link>
-            <Link
               href="/algos"
               className={`rounded-full border-2 border-transparent px-3 py-1 transition-colors hover:border-[#d8ff3e] hover:text-[#d8ff3e] ${
                 pathname === "/algos" || pathname.startsWith("/algos/") ? "border-[#d8ff3e] text-[#d8ff3e]" : ""
@@ -52,10 +44,26 @@ export function Nav() {
             <Link
               href="/create"
               className={`rounded-full border-2 border-transparent px-3 py-1 transition-colors hover:border-[#d8ff3e] hover:text-[#d8ff3e] ${
-                pathname === "/create" ? "border-[#d8ff3e] text-[#d8ff3e]" : ""
+                pathname === "/create" || pathname.startsWith("/create/") ? "border-[#d8ff3e] text-[#d8ff3e]" : ""
               }`}
             >
               {t("create")}
+            </Link>
+            <Link
+              href="/explore"
+              className={`rounded-full border-2 border-transparent px-3 py-1 transition-colors hover:border-[#d8ff3e] hover:text-[#d8ff3e] ${
+                pathname === "/explore" ? "border-[#d8ff3e] text-[#d8ff3e]" : ""
+              }`}
+            >
+              {t("explore")}
+            </Link>
+            <Link
+              href="/events"
+              className={`rounded-full border-2 border-transparent px-3 py-1 transition-colors hover:border-[#d8ff3e] hover:text-[#d8ff3e] ${
+                pathname === "/events" ? "border-[#d8ff3e] text-[#d8ff3e]" : ""
+              }`}
+            >
+              {t("events")}
             </Link>
           </nav>
         </div>
