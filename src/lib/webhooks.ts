@@ -1,9 +1,9 @@
 import { supabaseAdmin } from "@/lib/db/client";
-import { SITE } from "@/lib/config";
+import { SITE, CLUSTER } from "@/lib/config";
 import { enqueue } from "@/lib/jobs/queue";
 
 /**
- * Webhook alert komunitas —5 slot URL terpisah, dikonfigurasi admin di
+ * Webhook alert komunitas —6 slot URL terpisah, dikonfigurasi admin di
  * `/api/admin/webhooks` (disimpan di `pricing_config`, value {url}).
  *
  * Slot:
@@ -13,12 +13,13 @@ import { enqueue } from "@/lib/jobs/queue";
  *   wallet — wallet baru (mainnet / devnet-demo)
  *   algo   — algo baru dipublikasikan
  *   user   — user baru terdaftar (dideteksi job siklis user_alert_scan)
+ *   token  — token baru selesai dibuat on-chain (job create_token)
  *
  * Pengiriman LEWAT job queue (`webhook_alert`): retry backoff 30s×3,
  * timeout8s, URL dibaca ulang saat eksekusi (bila di-clear → skip).
  * enqueue saja saat URL slot kosong — panel job tidak dibanjiri no-op.
  */
-export const WEBHOOK_SLOTS = ["events", "tx", "wallet", "algo", "user"] as const;
+export const WEBHOOK_SLOTS = ["events", "tx", "wallet", "algo", "user", "token"] as const;
 export type WebhookSlot = (typeof WEBHOOK_SLOTS)[number];
 
 export const WEBHOOK_KEYS: Record<WebhookSlot, string> = {
@@ -27,6 +28,7 @@ export const WEBHOOK_KEYS: Record<WebhookSlot, string> = {
   wallet: "webhook_wallet",
   algo: "webhook_algo",
   user: "webhook_user",
+  token: "webhook_token",
 };
 
 export interface WebhookConfig {
@@ -35,6 +37,7 @@ export interface WebhookConfig {
   wallet: string;
   algo: string;
   user: string;
+  token: string;
 }
 
 /** Key config invite Discord (bukan slot alert — hanya tautan tombol situs). */
@@ -62,7 +65,7 @@ export async function getWebhookConfig(): Promise<WebhookConfig> {
     .from("pricing_config")
     .select("key, value")
     .in("key", Object.values(WEBHOOK_KEYS));
-  const out: WebhookConfig = { events: "", tx: "", wallet: "", algo: "", user: "" };
+  const out: WebhookConfig = { events: "", tx: "", wallet: "", algo: "", user: "", token: "" };
   for (const slot of WEBHOOK_SLOTS) {
     const row = (data ?? []).find((r) => r.key === WEBHOOK_KEYS[slot]);
     const url = (row?.value as { url?: unknown } | null)?.url;
@@ -98,20 +101,13 @@ export async function notifyWebhook(
 
 /* ───────────── Envelope payload + styling Discord ───────────── */
 
-export interface DiscordEmbedField {
-  name: string;
-  value: string;
-  inline?: boolean;
-}
-
 export interface DiscordEmbed {
+  /** Nama domain di atas judul — membuat embed terbaca sebagai "website card". */
+  provider?: { name: string };
   title?: string;
   url?: string;
   description?: string;
   color?: number;
-  fields?: DiscordEmbedField[];
-  footer?: { text: string };
-  timestamp?: string;
 }
 
 /**
@@ -135,16 +131,17 @@ export interface WebhookEnvelope {
   embeds: DiscordEmbed[];
 }
 
-/** Warna embed + nama pengirim per slot (palet brand: lime #d8ff3e + aksen). */
+/** Nama pengirim + warna embed per slot (palet brand: lime #d8ff3e + aksen). */
 const SLOT_STYLE: Record<WebhookSlot, { username: string; color: number }> = {
   events: { username: "Artian · Event Tracker", color: 0x7c3aed },
   tx: { username: "Artian · Transactions", color: 0x22c55e },
   wallet: { username: "Artian · Wallets", color: 0x3b82f6 },
   algo: { username: "Artian · Algos", color: 0xd8ff3e },
   user: { username: "Artian · Users", color: 0xf59e0b },
+  token: { username: "Artian · Tokens", color: 0x06b6d4 },
 };
 
-/** Judul embed untuk slot `tx` (berdasar `data.subkind`) — pendek & jelas. */
+/** Jenis transaksi (berdasar `data.subkind`) → label pendek utk judul alert. */
 const TX_LABEL: Record<string, string> = {
   order_paid: "Order paid",
   withdrawal: "Withdrawal confirmed",
@@ -159,31 +156,64 @@ function siteBase(): string {
   return SITE.url.replace(/\/+$/, "");
 }
 
+/** Nilai primitif apa pun → string (object/array dianggap kosong). */
+function raw(data: Record<string, unknown>, key: string): string {
+  const v = data[key];
+  if (v === null || v === undefined || typeof v === "object") return "";
+  return String(v).trim();
+}
+
+/** Domain utk provider embed (tampilan kartu website). */
+function domainOf(url: string): string {
+  try {
+    return new URL(url).hostname;
+  } catch {
+    return siteBase().replace(/^https?:\/\//, "");
+  }
+}
+
 /**
- * URL utama alert — disisipkan ke `text`/`content` DAN diisi sebagai field
- * `url` top-level. Events memakai URL post eksternal (yang dipantau komunitas);
- * slot lain mengarah ke halaman relevan di situs.
+ * `?cluster=` link explorer — `demo` (wallet/token dari dompet latihan) selalu
+ * devnet; sisanya mengikuti cluster situs (`NEXT_PUBLIC_SOLANA_CLUSTER`).
+ */
+function clusterParam(kind: string): string {
+  return kind === "demo" ? "devnet" : CLUSTER;
+}
+
+/** Link cek transaksi di jaringan Solana (explorer resmi). */
+export function explorerTxUrl(signature: string, kind?: string): string {
+  return `https://explorer.solana.com/tx/${signature}?cluster=${clusterParam(kind ?? "")}`;
+}
+
+/** Link cek akun (mint / pubkey) di jaringan Solana. */
+export function explorerAddressUrl(address: string, kind?: string): string {
+  return `https://explorer.solana.com/address/${address}?cluster=${clusterParam(kind ?? "")}`;
+}
+
+/**
+ * URL utama alert — diisi sebagai field `url` top-level DAN disisipkan ke
+ * `text` utk receiver generik. Events memakai URL post eksternal (yang
+ * dipantau komunitas), tx memakai link explorer, slot lain halaman situs.
  */
 function primaryUrl(slot: WebhookSlot, data: Record<string, unknown>): string {
   const base = siteBase();
   const ext = typeof data.url === "string" ? data.url.trim() : "";
-  const str = (key: string) => (typeof data[key] === "string" ? (data[key] as string) : "");
+  const str = (key: string) => raw(data, key);
 
   switch (slot) {
     case "events":
       return ext || `${base}/events`;
     case "algo":
       return str("algoId") ? `${base}/algos/${str("algoId")}` : `${base}/algos`;
+    case "token":
+      return str("mint") ? `${base}/token/${str("mint")}` : `${base}/dashboard/tokens`;
     case "wallet":
     case "user":
       return `${base}/admin/users`;
     case "tx": {
-      const sub = str("subkind");
-      if (sub === "algo_subscribe" && str("algoId")) return `${base}/algos/${str("algoId")}`;
-      if (sub.startsWith("treasury_")) return `${base}/admin/revenue`;
-      if (sub.startsWith("admin_wallet_")) return `${base}/admin/users`;
-      if (sub === "order_paid" || sub === "withdrawal") return `${base}/admin`;
-      return `${base}/admin`;
+      // Yang dicari pembaca: bukti on-chain → langsung ke explorer.
+      const sig = str("tx") || str("sig");
+      return sig ? explorerTxUrl(sig, str("kind")) : `${base}/admin`;
     }
   }
 }
@@ -205,145 +235,109 @@ function withUrl(text: string, url: string): string {
   return `${text.slice(0, room).trimEnd()} … ${url}`;
 }
 
-/** Nilai primitif apa pun → string (object/array dianggap kosong). */
-function raw(data: Record<string, unknown>, key: string): string {
-  const v = data[key];
-  if (v === null || v === undefined || typeof v === "object") return "";
-  return String(v).trim();
-}
-
-function humanize(key: string): string {
-  return key.replace(/([a-z0-9])([A-Z])/g, "$1 $2").replace(/^./, (c) => c.toUpperCase());
-}
-
-/**
- * Ringkas nilai panjang agar enak dibaca sekilas di Discord:
- * pubkey/signature base58 → `5cG1oj5…Fg361`, UUID → `b02d2677`, sisanya potong 40 char.
- */
+/** Signature base58 → `3yS7Qm9…YwZxCvBnHp` (alamat/tanda tangan tetap utuh di `data`). */
 function short(value: string): string {
   if (/^[1-9A-HJ-NP-Za-km-z]{32,}$/.test(value)) return `${value.slice(0, 8)}…${value.slice(-6)}`;
-  if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value)) {
-    return value.slice(0, 8);
-  }
   return value.length > 40 ? `${value.slice(0, 39)}…` : value;
 }
 
-/** Label nama field embed. */
-const FIELD_LABEL: Record<string, string> = {
-  amount: "Amount",
-  asset: "Asset",
-  orderId: "Order",
-  service: "Service",
-  destination: "Destination",
-  amountRaw: "Amount",
-  priceRaw: "Price",
-  commissionRaw: "Fee",
-  sig: "Tx",
-  tx: "Tx",
-  userId: "User",
-  algoName: "Algo",
-  publicKey: "Public key",
-  label: "Label",
-  email: "Email",
-  username: "Username",
-  priceUsdc: "Price",
-  billing: "Billing",
-};
-
-/**
- * Key yang ditampilkan per slot `tx`, diurutkan dari yang paling penting,
- * maksimal 3 baris. Key mengikuti payload ASLI tiap pemanggil
- * (`orders.ts`, `runner.ts` WD, `subscribe`, treasury, admin wallet);
- * `subkind`/`actor`/`walletId`/`userId` (non-treasury) sengaja dibuang —
- * sudah terbaca di judul dan tidak berguna utk pembaca manusia.
- */
-const TX_FIELD_KEYS: Record<string, string[]> = {
-  order_paid: ["service", "amountRaw", "tx", "orderId"],
-  withdrawal: ["amountRaw", "destination", "tx", "userId"],
-  algo_subscribe: ["algoName", "priceRaw", "tx", "billing"],
-  treasury_deposit: ["amount", "asset", "tx"],
-  treasury_withdraw: ["amount", "asset", "tx"],
-  admin_wallet_topup: ["userId", "amount", "asset", "tx"],
-  admin_wallet_withdraw: ["userId", "amount", "asset", "tx"],
-};
-
-/** Field embed per slot selain `tx` — hanya info yang berguna utk pembaca. */
-const SLOT_FIELD_KEYS: Record<WebhookSlot, string[]> = {
-  events: [], // caption = deskripsi embed; link = judul embed
-  tx: [],
-  wallet: ["publicKey"],
-  algo: ["priceUsdc", "billing"],
-  user: ["email", "username"],
-};
-
-/**
- * Label dompet yang cuma turunan `kind` ("Demo (Devnet)", "Mainnet") = noise —
- * sudah terbaca di judul. Label kustom ("Bot trading") tetap ditampilkan.
- */
-function isDefaultLabel(kind: string, label: string): boolean {
-  if (!label) return true;
-  if (new RegExp(`^${kind || "mainnet"}\\b`, "i").test(label)) return true;
-  return kind === "demo" ? /devnet/i.test(label) : /mainnet/i.test(label);
+/** Jenis (mainnet/devnet) utk wallet & token — `demo` = dompet latihan devnet. */
+function kindLabel(kind: string): string {
+  return kind === "demo" ? "devnet" : "mainnet";
 }
 
-/** Ambil field sesuai allowlist; `amount`+`asset` digabung jadi satu baris. */
-function pickFields(data: Record<string, unknown>, keys: string[], max = 3): DiscordEmbedField[] {
-  const out: DiscordEmbedField[] = [];
-  const usedAsset = { done: false };
-
-  for (const key of keys) {
-    if (out.length >= max) break;
-    if (key === "asset" && usedAsset.done) continue;
-
-    let name: string;
-    let value: string;
-
-    if (key === "amount") {
-      name = "Amount";
-      const amount = raw(data, "amount");
-      const asset = raw(data, "asset");
-      if (asset) usedAsset.done = true;
-      value = [amount, asset.toUpperCase()].filter(Boolean).join(" ");
-    } else if (key === "priceUsdc") {
-      name = "Price";
-      value = raw(data, "priceUsdc") ? `${raw(data, "priceUsdc")} USDC` : "";
-    } else if (key.endsWith("Raw")) {
-      // Nilai on-chain dalam satuan mentah 6 desimal → tampil sebagai USDC.
-      name = FIELD_LABEL[key] ?? humanize(key);
-      const n = Number(raw(data, key));
-      value = Number.isFinite(n) && n > 0 ? `${(n / 1_000_000).toFixed(2)} USDC` : "";
-    } else {
-      name = FIELD_LABEL[key] ?? humanize(key);
-      value = raw(data, key);
-    }
-
-    if (!value) continue;
-    out.push({ name, value: short(value).slice(0, 1024), inline: true });
-  }
-
-  return out;
+/** Tautan markdown Discord (`[label](url)`). */
+function mdLink(label: string, url: string): string {
+  return `[${label}](${url})`;
 }
 
-function titleFor(slot: WebhookSlot, data: Record<string, unknown>): string {
+/**
+ * Isi embed per slot — DIRANCANG MINIMAL sesuai permintaan (18 Okt malam):
+ *   events — "website card": provider (domain) + judul link + caption saja
+ *   wallet — teks: `New wallet — mainnet` + alamat lengkap
+ *   user   — teks satu baris: `New user — @username`
+ *   algo   — website card: provider + judul link ke halaman algo
+ *   token  — website card: provider + judul link + 2 tautan (halaman token & explorer)
+ *   tx     — `New Transaction — <jenis>` + signature + tautan explorer
+ * Tanpa field, tanpa timestamp, tanpa footer (sengaja — jangan terlalu detail).
+ */
+function embedFor(slot: WebhookSlot, data: Record<string, unknown>, url: string, color: number): DiscordEmbed {
+  const str = (key: string) => raw(data, key);
+  const base = siteBase();
+
   switch (slot) {
-    case "events":
-      return "New event posted";
-    case "algo":
-      return raw(data, "name") ? `New algo: ${raw(data, "name").slice(0, 200)}` : "New algo published";
-    case "wallet":
-      return `${raw(data, "kind") === "demo" ? "Demo" : "Mainnet"} wallet created`;
-    case "user":
-      return "New user registered";
-    case "tx":
-      return TX_LABEL[raw(data, "subkind")] ?? "Transaction";
+    case "events": {
+      const caption = str("caption");
+      return {
+        provider: { name: domainOf(url) },
+        title: "New event posted",
+        url,
+        ...(caption ? { description: caption.slice(0, 280) } : {}),
+        color,
+      };
+    }
+    case "wallet": {
+      const address = str("publicKey");
+      return {
+        title: `New wallet — ${kindLabel(str("kind"))}`,
+        ...(address ? { description: address } : {}),
+        color,
+      };
+    }
+    case "user": {
+      const username = str("username");
+      const email = str("email");
+      return {
+        title: `New user — ${username ? `@${username}` : email || "user"}`,
+        color,
+      };
+    }
+    case "algo": {
+      const name = str("name");
+      return {
+        provider: { name: domainOf(url) },
+        title: `New algo — ${name || "algo baru"}`.slice(0, 256),
+        url,
+        color,
+      };
+    }
+    case "token": {
+      const name = str("name");
+      const symbol = str("symbol");
+      const mint = str("mint");
+      const kind = kindLabel(str("kind"));
+      const lines = [`${base}/token/${mint}`, mint ? explorerAddressUrl(mint, str("kind")) : ""]
+        .filter(Boolean)
+        .map((u, i) => mdLink(i === 0 ? "Token page" : "Mint · Solana Explorer", u));
+      return {
+        provider: { name: domainOf(url) },
+        title: `New token — ${name || symbol || "token baru"}${symbol ? ` (${symbol})` : ""} · ${kind}`.slice(0, 256),
+        url,
+        ...(lines.length ? { description: lines.join("\n") } : {}),
+        color,
+      };
+    }
+    case "tx": {
+      const sig = str("tx") || str("sig");
+      const explorer = sig ? explorerTxUrl(sig, str("kind")) : "";
+      const lines = [sig ? `tx \`${short(sig)}\`` : "", explorer ? mdLink("View on Solana Explorer", explorer) : ""]
+        .filter(Boolean);
+      return {
+        title: `New Transaction — ${TX_LABEL[str("subkind")] ?? "Transaction"}`,
+        ...(explorer ? { url: explorer } : {}),
+        ...(lines.length ? { description: lines.join("\n") } : {}),
+        color,
+      };
+    }
   }
 }
 
 /**
  * Bentuk body POST final — DIRANCANG UNTUK DISCORD LEBIH DULU:
  * - `content` = `""` → Discord menampilkan `embeds` saja (tidak ada kalimat dobel).
- * - `embeds` = judul (bisa diklik ke `url`) + deskripsi (hanya utk caption event)
- *   + maks 3 field penting + timestamp. Tanpa footer (username sudah menyebut slot).
+ * - `embeds` = SATU embed ringkas per slot (lihat `embedFor`) — tanpa field,
+ *   tanpa timestamp, tanpa footer. Events & algo tampil sebagai kartu website
+ *   (provider = domain, judul bisa diklik).
  * - `text` + `url` + `data` tetap utuh utk receiver generik (n8n/Zapier/postman).
  */
 export function buildWebhookEnvelope(input: {
@@ -359,18 +353,6 @@ export function buildWebhookEnvelope(input: {
   const text = withUrl(input.text, url);
   const ts = input.ts ?? new Date().toISOString();
 
-  // Deskripsi embed: hanya caption event (itu memang teks panjang yg dibaca orang).
-  const caption = raw(data, "caption").slice(0, 280);
-  const description = caption ? (raw(data, "caption").length > 280 ? `${caption}…` : caption) : "";
-
-  const keys =
-    input.slot === "tx"
-      ? (TX_FIELD_KEYS[raw(data, "subkind")] ?? ["amount", "asset", "sig"])
-      : input.slot === "wallet" && !isDefaultLabel(raw(data, "kind"), raw(data, "label"))
-        ? [...SLOT_FIELD_KEYS.wallet, "label"]
-        : SLOT_FIELD_KEYS[input.slot];
-  const fields = pickFields(data, keys);
-
   return {
     event: input.kind,
     slot: input.slot,
@@ -381,15 +363,6 @@ export function buildWebhookEnvelope(input: {
     data,
     username: style.username,
     avatar_url: `${siteBase()}/icon.png`,
-    embeds: [
-      {
-        title: titleFor(input.slot, data).slice(0, 256),
-        url,
-        ...(description ? { description } : {}),
-        color: style.color,
-        ...(fields.length ? { fields } : {}),
-        timestamp: ts,
-      },
-    ],
+    embeds: [embedFor(input.slot, data, url, style.color)],
   };
 }

@@ -240,12 +240,12 @@ check("jobs done/failed habis setelah purge", 0, len(rows))
 st, body = http(f"{BASE}/api/cron/run-jobs?purge=true", "POST")
 check("purge tanpa CRON_SECRET → 401", 401, st)
 
-# ── 7. webhook alert (5 slot konfigurasi admin) ────────────────
+# ── 7. webhook alert (6 slot konfigurasi admin) ────────────────
 st, body = http(f"{BASE}/api/admin/webhooks", "GET", None, H)
 jw = json.loads(body) if st == 200 else {}
 check("GET /api/admin/webhooks → 200", 200, st)
-check("5 slot lengkap (events/tx/wallet/algo/user)", True,
-      all(k in jw for k in ("events", "tx", "wallet", "algo", "user")))
+check("6 slot lengkap (events/tx/wallet/algo/user/token)", True,
+      all(k in jw for k in ("events", "tx", "wallet", "algo", "user", "token")))
 
 st, body = http(f"{BASE}/api/admin/webhooks", "PATCH",
                 {"slot": "bogus", "url": "https://example.com/x"}, H)

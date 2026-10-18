@@ -186,6 +186,22 @@ async function handleCreateToken(payload: Record<string, unknown>): Promise<void
     target: result.mint,
     payload: { orderId },
   });
+
+  // Alert (slot `token`) — token baru selesai dibuat on-chain.
+  const { notifyWebhook } = await import("@/lib/webhooks");
+  await notifyWebhook(
+    "token",
+    "token_created",
+    `New token: ${cfg.name} (${cfg.symbol}) — ${kind}`,
+    {
+      mint: result.mint,
+      name: cfg.name,
+      symbol: cfg.symbol,
+      kind,
+      tx: result.signatures[0] ?? null,
+      userId: order.user_id,
+    },
+  );
   await chainInitialPool(order, payload);
 }
 

@@ -357,6 +357,7 @@
     "webhookWallet": "New wallet",
     "webhookAlgo": "New algo",
     "webhookUser": "New user",
+    "webhookToken": "New token",
     "webhookSaved": "Saved: {slot} slot.",
     "webhookDiscord": "Discord invite"
   },

@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useTranslations } from "next-intl";
 
-const SLOTS = ["events", "tx", "wallet", "algo", "user", "discord"] as const;
+const SLOTS = ["events", "tx", "wallet", "algo", "user", "token", "discord"] as const;
 type Slot = (typeof SLOTS)[number];
 
 const LABEL_KEY: Record<Slot, string> = {
@@ -12,15 +12,16 @@ const LABEL_KEY: Record<Slot, string> = {
   wallet: "webhookWallet",
   algo: "webhookAlgo",
   user: "webhookUser",
+  token: "webhookToken",
   discord: "webhookDiscord",
 };
 
-const empty: Record<Slot, string> = { events: "", tx: "", wallet: "", algo: "", user: "", discord: "" };
+const empty: Record<Slot, string> = { events: "", tx: "", wallet: "", algo: "", user: "", token: "", discord: "" };
 
 /**
- * Kartu pengaturan webhook alert —5 slot URL terpisah (event tracker,
- * transaksi, wallet baru, algo baru, user baru) + URL invite Discord
- * (tombol popup kanan bawah). URL kosong = nonaktif.
+ * Kartu pengaturan webhook alert —6 slot URL terpisah (event tracker,
+ * transaksi, wallet baru, algo baru, user baru, token baru) + URL invite
+ * Discord (tombol popup kanan bawah). URL kosong = nonaktif.
  * Simpan per-slot (PATCH /api/admin/webhooks).
  */
 export function WebhooksCard() {
