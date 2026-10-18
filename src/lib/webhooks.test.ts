@@ -109,60 +109,116 @@ describe("buildWebhookEnvelope — field disaring (hanya yang penting)", () => {
     ]);
   });
 
-  it("tx: amount+asset digabung 1 baris, subkind & actor dibuang, maks 3 field", () => {
-    const SIG = "3yS7Qm9WzXe2KdP4Rf8UvNc6JhL5GtAbDeMqYwZxCvBnHp"; // base58 valid
+  // Payload di bawah ini disalin persis dari pemanggil aslinya:
+  // orders.ts, runner.ts (WD), subscribe, treasury route, admin wallet route.
+  const SIG = "3yS7Qm9WzXe2KdP4Rf8UvNc6JhL5GtAbDeMqYwZxCvBnHp"; // base58 valid
+
+  it("tx order_paid (amountRaw+service+tx): nominal terkonversi, subkind & kind dibuang", () => {
     const env = buildWebhookEnvelope({
       slot: "tx",
       kind: "transaction",
-      text: "Order paid: create_token 2.00 USDC (mainnet)",
+      text: "Order paid: create_token 2.00 USDC (mainnet) — tx 3yS7Qm9WzXe…",
       data: {
         subkind: "order_paid",
         orderId: 42,
-        amount: "2.00",
-        asset: "usdc",
-        sig: SIG,
-        actor: "admin-id",
+        service: "create_token",
+        amountRaw: "2000000",
+        tx: SIG,
+        userId: USER_ID,
+        kind: "mainnet",
       },
     });
     expect(env.embeds[0].title).toBe("Order paid");
     expect(env.embeds[0].fields?.map((f) => `${f.name}=${f.value}`)).toEqual([
-      "Amount=2.00 USDC",
-      "Order=42",
+      "Service=create_token",
+      "Amount=2.00 USDC", // 2000000 / 1e6
       `Tx=${SIG.slice(0, 8)}…${SIG.slice(-6)}`,
     ]);
     expect(env.url).toBe(`${base}/admin`);
   });
 
-  it("tx treasury_* → /admin/revenue; admin_wallet_* → /admin/users", () => {
-    expect(
-      buildWebhookEnvelope({
-        slot: "tx",
-        kind: "transaction",
-        text: "Treasury deposit: 10 USDC",
-        data: { subkind: "treasury_deposit", amount: "10.00", asset: "usdc" },
-      }).url,
-    ).toBe(`${base}/admin/revenue`);
-    expect(
-      buildWebhookEnvelope({
-        slot: "tx",
-        kind: "transaction",
-        text: "Admin topup: 5 USDC",
-        data: { subkind: "admin_wallet_topup", userId: USER_ID, amount: "5.00", asset: "usdc" },
-      }).url,
-    ).toBe(`${base}/admin/users`);
-  });
-
-  it("tx algo_subscribe → halaman publik algo + nama algo di field", () => {
+  it("tx withdrawal: destination diringkas, orderId/tipe wallet dibuang", () => {
     const env = buildWebhookEnvelope({
       slot: "tx",
       kind: "transaction",
-      text: 'Algo subscription paid: "Scalper X" 5.00 USDC',
-      data: { subkind: "algo_subscribe", algoId: "algo-9", algoName: "Scalper X", amount: "5.00", asset: "usdc" },
+      text: "Withdrawal confirmed: 1.50 USDC → 9CDQv…",
+      data: {
+        subkind: "withdrawal",
+        id: 88,
+        amountRaw: "1500000",
+        destination: PUBKEY,
+        tx: SIG,
+        userId: USER_ID,
+        kind: "mainnet",
+      },
+    });
+    expect(env.embeds[0].title).toBe("Withdrawal confirmed");
+    expect(env.embeds[0].fields?.map((f) => `${f.name}=${f.value}`)).toEqual([
+      "Amount=1.50 USDC",
+      `Destination=${PUBKEY.slice(0, 8)}…${PUBKEY.slice(-6)}`,
+      `Tx=${SIG.slice(0, 8)}…${SIG.slice(-6)}`,
+    ]);
+  });
+
+  it("tx algo_subscribe (priceRaw): judul + nama algo + harga, halaman publik algo", () => {
+    const env = buildWebhookEnvelope({
+      slot: "tx",
+      kind: "transaction",
+      text: 'Algo subscription paid: "Scalper X" 5.00 USDC (monthly)',
+      data: {
+        subkind: "algo_subscribe",
+        algoId: "algo-9",
+        algoName: "Scalper X",
+        subscriberId: USER_ID,
+        billing: "monthly",
+        priceRaw: "5000000",
+        commissionRaw: "1000000",
+        tx: SIG,
+      },
     });
     expect(env.url).toBe(`${base}/algos/algo-9`);
+    expect(env.embeds[0].title).toBe("Algo subscription paid");
     expect(env.embeds[0].fields?.map((f) => `${f.name}=${f.value}`)).toEqual([
-      "Amount=5.00 USDC",
       "Algo=Scalper X",
+      "Price=5.00 USDC",
+      `Tx=${SIG.slice(0, 8)}…${SIG.slice(-6)}`,
+    ]);
+  });
+
+  it("tx treasury_* (amount+asset) → /admin/revenue; admin_wallet_* → /admin/users", () => {
+    const dep = buildWebhookEnvelope({
+      slot: "tx",
+      kind: "transaction",
+      text: "Treasury deposit: 10.00 USDC",
+      data: { subkind: "treasury_deposit", asset: "usdc", amount: "10.00", tx: SIG, actor: USER_ID },
+    });
+    expect(dep.url).toBe(`${base}/admin/revenue`);
+    expect(dep.embeds[0].title).toBe("Treasury deposit");
+    expect(dep.embeds[0].fields?.map((f) => `${f.name}=${f.value}`)).toEqual([
+      "Amount=10.00 USDC",
+      `Tx=${SIG.slice(0, 8)}…${SIG.slice(-6)}`,
+    ]);
+
+    const topup = buildWebhookEnvelope({
+      slot: "tx",
+      kind: "transaction",
+      text: "Admin topup: 5.00 USDC → user wallet",
+      data: {
+        subkind: "admin_wallet_topup",
+        userId: USER_ID,
+        walletId: "w-1",
+        asset: "usdc",
+        amount: "5.00",
+        tx: SIG,
+        actor: USER_ID,
+      },
+    });
+    expect(topup.url).toBe(`${base}/admin/users`);
+    expect(topup.embeds[0].title).toBe("User wallet top-up");
+    expect(topup.embeds[0].fields?.map((f) => `${f.name}=${f.value}`)).toEqual([
+      `User=${USER_ID.slice(0, 8)}`,
+      "Amount=5.00 USDC",
+      `Tx=${SIG.slice(0, 8)}…${SIG.slice(-6)}`,
     ]);
   });
 });

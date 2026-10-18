@@ -881,6 +881,23 @@ async function handleUserAlertScan(): Promise<void> {
     .sort((a, b) => ((a.created_at ?? "") < (b.created_at ?? "") ? -1 : 1));
   if (!fresh.length) return;
 
+  /**
+   * Majukan marker SEBELUM mengumumkan + verifikasi tulisannya, lalu throw
+   * bila gagal (job retry). Sebelumnya marker ditulis tanpa dicek SETELAH
+   * pengumuman → bila tulisannya gagal, scan berikutnya mengumumkan user
+   * yang sama lagi (terbukti 3× saat uji live 18 Okt). Alert bersifat
+   * informatif, jadi "lebih baik kelewatan daripada dobel" dipilih di sini.
+   */
+  const next = fresh[fresh.length - 1].created_at;
+  const { error: markErr } = await db
+    .from("pricing_config")
+    .upsert({ key: KEY, value: { since: next } }, { onConflict: "key" });
+  if (markErr) throw new Error(`marker scan user gagal disimpan: ${markErr.message}`);
+  const { data: check } = await db.from("pricing_config").select("value").eq("key", KEY).maybeSingle();
+  if ((check?.value as { since?: unknown } | null)?.since !== next) {
+    throw new Error("marker scan user tidak tersimpan (nilai tidak berubah)");
+  }
+
   const { notifyWebhook } = await import("@/lib/webhooks");
   for (const u of fresh) {
     const username = (u.user_metadata as { username?: unknown } | null)?.username;
@@ -892,10 +909,6 @@ async function handleUserAlertScan(): Promise<void> {
       { userId: u.id, email: u.email ?? null, username: uname ? uname.slice(2, -1) : null, createdAt: u.created_at },
     );
   }
-  // Majukan marker ke user terakhir agar tidak diumumkan dua kali.
-  await db
-    .from("pricing_config")
-    .upsert({ key: KEY, value: { since: fresh[fresh.length - 1].created_at } }, { onConflict: "key" });
 }
 
 const handlers: Record<JobType, Handler> = {

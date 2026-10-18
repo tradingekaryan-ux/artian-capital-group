@@ -233,6 +233,11 @@ const FIELD_LABEL: Record<string, string> = {
   amount: "Amount",
   asset: "Asset",
   orderId: "Order",
+  service: "Service",
+  destination: "Destination",
+  amountRaw: "Amount",
+  priceRaw: "Price",
+  commissionRaw: "Fee",
   sig: "Tx",
   tx: "Tx",
   userId: "User",
@@ -247,15 +252,17 @@ const FIELD_LABEL: Record<string, string> = {
 
 /**
  * Key yang ditampilkan per slot `tx`, diurutkan dari yang paling penting,
- * maksimal 3 baris. `subkind`/`actor`/`walletId` sengaja dibuang — sudah ada
- * di title dan tidak berguna utk pembaca manusia.
+ * maksimal 3 baris. Key mengikuti payload ASLI tiap pemanggil
+ * (`orders.ts`, `runner.ts` WD, `subscribe`, treasury, admin wallet);
+ * `subkind`/`actor`/`walletId`/`userId` (non-treasury) sengaja dibuang —
+ * sudah terbaca di judul dan tidak berguna utk pembaca manusia.
  */
 const TX_FIELD_KEYS: Record<string, string[]> = {
-  order_paid: ["amount", "asset", "orderId", "sig"],
-  withdrawal: ["amount", "asset", "userId", "sig"],
-  algo_subscribe: ["amount", "asset", "algoName", "sig"],
-  treasury_deposit: ["amount", "asset", "sig"],
-  treasury_withdraw: ["amount", "asset", "sig"],
+  order_paid: ["service", "amountRaw", "tx", "orderId"],
+  withdrawal: ["amountRaw", "destination", "tx", "userId"],
+  algo_subscribe: ["algoName", "priceRaw", "tx", "billing"],
+  treasury_deposit: ["amount", "asset", "tx"],
+  treasury_withdraw: ["amount", "asset", "tx"],
   admin_wallet_topup: ["userId", "amount", "asset", "tx"],
   admin_wallet_withdraw: ["userId", "amount", "asset", "tx"],
 };
@@ -300,6 +307,11 @@ function pickFields(data: Record<string, unknown>, keys: string[], max = 3): Dis
     } else if (key === "priceUsdc") {
       name = "Price";
       value = raw(data, "priceUsdc") ? `${raw(data, "priceUsdc")} USDC` : "";
+    } else if (key.endsWith("Raw")) {
+      // Nilai on-chain dalam satuan mentah 6 desimal → tampil sebagai USDC.
+      name = FIELD_LABEL[key] ?? humanize(key);
+      const n = Number(raw(data, key));
+      value = Number.isFinite(n) && n > 0 ? `${(n / 1_000_000).toFixed(2)} USDC` : "";
     } else {
       name = FIELD_LABEL[key] ?? humanize(key);
       value = raw(data, key);
