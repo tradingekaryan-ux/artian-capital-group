@@ -298,7 +298,7 @@ events(id uuid pk, url text, caption text, meta jsonb default '{}',
 | Unit (tertunda) | Vitest | enkripsi AES-GCM, state machine order, validasi input |
 | Integration (tertunda) | Vitest + mock RPC | token-create tx builder (assert instruksi), withdrawal flow |
 | E2E manual (tertunda) | `scripts/devnet-smoke.ts` | topup→create token→pool→swap→withdraw di devnet |
-| E2E live ✅ | `scripts/e2e-admin-test.py` + `scripts/e2e-algo-test.py` | sesi magiclink→cookie SSR: admin wallet/treasury + **ops dompet user (topup/withdraw/hapus), hapus algo, purge cron, webhook5 slot (set/clear/SSRF + delivery live via job → postman-echo)** (39 cek) & **algo marketplace** (50 cek) — lulus penuh di live; smoke terpisah **events+landing+nav 19/19** (hero/blok fitur baru, urut nav Algos→Create→Explore→Events, CRUD event admin + og-meta, SSRF/caption guard) |
+| E2E live ✅ | `scripts/e2e-admin-test.py` + `scripts/e2e-algo-test.py` | sesi magiclink→cookie SSR: admin wallet/treasury + **ops dompet user (topup/withdraw/hapus), hapus algo, purge cron, webhook5 slot (set/clear/SSRF + delivery live via job → postman-echo + set/clear discord)** (46 cek) & **algo marketplace** (50 cek) — lulus penuh di live; smoke terpisah **events+landing+nav 19/19** (hero/blok fitur baru, urut nav Algos→Create→Explore→Events, CRUD event admin + og-meta, SSRF/caption guard) |
 | CI ✅ | GitHub Actions `ci.yml` | `lint`, `test`, `typecheck` (`next typegen && tsc`), `build` tiap push/PR — Node 22 |
 | Post-deploy | worker cron tiap menit | sentuh DB tiap menit (de facto heartbeat, PRD §10 R5) + jalankan job siklis `price_snapshot` |
 
