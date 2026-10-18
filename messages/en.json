@@ -27,7 +27,10 @@
     "usdcBalance": "USDC Balance",
     "solBalance": "SOL Balance",
     "networkFee": "Network gas paid from your SOL balance",
-    "disclaimer": "Artian is a tooling platform, not an investment advisor. Crypto tokens are high risk and on-chain transactions are irreversible."
+    "disclaimer": "Artian is a tooling platform, not an investment advisor. Crypto tokens are high risk and on-chain transactions are irreversible.",
+    "discordTitle": "Join our Discord",
+    "discordHint": "News, events and community support — one click away.",
+    "discordCta": "Join server"
   },
   "landing": {
     "heroSubtitle": "A finance hub for builders and traders: launch your own token with liquidity in minutes, subscribe to crypto signal algos and forward them to your community, and follow live market data for the instruments you care about. Pay in USDC — no infrastructure fees.",
@@ -345,7 +348,16 @@
     "userAlgos": "Algos",
     "deleteAlgo": "Delete",
     "confirmDeleteAlgo": "Permanently delete algo “{name}” and all its data (hooks, messages, subscriptions, slots)?",
-    "algoDeleted": "Algo deleted."
+    "algoDeleted": "Algo deleted.",
+    "webhooks": "Webhook alerts",
+    "webhookHint": "Each slot has its own URL. JSON envelope {event, slot, text, content, ts, data} is POSTed when the trigger fires; empty URL = off. Failures retry3× (backoff30s).",
+    "webhookEvents": "Event Tracker",
+    "webhookTx": "Transactions",
+    "webhookWallet": "New wallet",
+    "webhookAlgo": "New algo",
+    "webhookUser": "New user",
+    "webhookSaved": "Saved: {slot} slot.",
+    "webhookDiscord": "Discord invite"
   },
   "fees": {
     "title": "How fees work",

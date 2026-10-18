@@ -181,6 +181,23 @@ export async function POST(
       signature,
     },
   });
+  // Alert transaksi (slot `tx`) — langganan berbayar ter-split on-chain.
+  const { notifyWebhook } = await import("@/lib/webhooks");
+  await notifyWebhook(
+    "tx",
+    "transaction",
+    `Algo subscription paid: "${algo.name}" ${(Number(algo.price_usdc)).toFixed(2)} USDC (${algo.billing}) — tx ${signature.slice(0, 16)}…`,
+    {
+      subkind: "algo_subscribe",
+      algoId: id,
+      algoName: algo.name,
+      subscriberId: auth.user.id,
+      billing: algo.billing,
+      priceRaw: priceRaw.toString(),
+      commissionRaw: commissionRaw.toString(),
+      tx: signature,
+    },
+  );
   return NextResponse.json({ ok: true, signature, expiresAt });
 }
 

@@ -192,10 +192,19 @@ export async function POST(
     await audit({
       actor: admin.id,
       action: action === "topup" ? "admin_wallet_topup" : "admin_wallet_withdraw",
-      target: target.public_key as string,
-      payload: { userId, walletId: target.id as string, asset, amount: amountUi, sig },
+      target: target.public_key,
+      payload: { userId, walletId: target.id, asset, amount: amountUi, sig },
       ip: clientIp(req),
     });
+
+    // Alert transaksi (slot `tx`) — topup/withdraw dompet user oleh admin.
+    const { notifyWebhook } = await import("@/lib/webhooks");
+    await notifyWebhook(
+      "tx",
+      "transaction",
+      `Admin ${action}: ${amountUi} ${asset.toUpperCase()} ${action === "topup" ? "→" : "←"} user wallet (tx ${sig.slice(0, 16)}…)`,
+      { subkind: `admin_wallet_${action}`, userId, walletId: target.id, asset, amount: amountUi, tx: sig, actor: admin.id },
+    );
 
     return NextResponse.json({ ok: true, sig, asset, amount: amountUi });
   } catch (e) {

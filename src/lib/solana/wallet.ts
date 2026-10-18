@@ -43,6 +43,16 @@ async function insertWallet(
     .select(SELECT_WALLET)
     .single();
   if (error) throw error;
+
+  // Alert (slot `wallet`) — wallet baru (mainnet ataupun demo/devnet).
+  const { notifyWebhook } = await import("@/lib/webhooks");
+  await notifyWebhook(
+    "wallet",
+    "wallet_created",
+    `New ${kind} wallet created: ${kp.publicKeyBase58}`,
+    { userId, kind, publicKey: kp.publicKeyBase58, label },
+  );
+
   return data as WalletRow;
 }
 

@@ -173,6 +173,15 @@ export async function POST(req: Request) {
     payload: { name, priceUsdc, billing: finalBilling },
     ip,
   });
+
+  // Alert (slot `algo`) — algo baru dipublikasikan.
+  const { notifyWebhook } = await import("@/lib/webhooks");
+  await notifyWebhook(
+    "algo",
+    "algo_created",
+    `New algo published: "${name}" — ${priceUsdc} USDC ${finalBilling}`,
+    { algoId: algo.id, name, priceUsdc, billing: finalBilling, userId: auth.user.id },
+  );
   return NextResponse.json(
     {
       algo: algo as AlgoRow,

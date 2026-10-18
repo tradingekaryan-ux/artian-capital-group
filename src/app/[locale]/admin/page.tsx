@@ -2,6 +2,7 @@ import { getTranslations, setRequestLocale } from "next-intl/server";
 import { redirect } from "next/navigation";
 import { requireAdmin } from "@/lib/admin";
 import { AdminPanel } from "@/components/admin/panel";
+import { WebhooksCard } from "@/components/admin/webhooks-card";
 import { Link } from "@/i18n/navigation";
 
 export default async function AdminPage({ params }: PageProps<"/[locale]/admin">) {
@@ -27,6 +28,7 @@ export default async function AdminPage({ params }: PageProps<"/[locale]/admin">
       </div>
       <p className="text-sm font-medium text-muted-ink">{t("mainnetOnlyNote")}</p>
       <AdminPanel />
+      <WebhooksCard />
     </div>
   );
 }

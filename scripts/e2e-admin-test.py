@@ -240,5 +240,86 @@ check("jobs done/failed habis setelah purge", 0, len(rows))
 st, body = http(f"{BASE}/api/cron/run-jobs?purge=true", "POST")
 check("purge tanpa CRON_SECRET → 401", 401, st)
 
+# ── 7. webhook alert (5 slot konfigurasi admin) ────────────────
+st, body = http(f"{BASE}/api/admin/webhooks", "GET", None, H)
+jw = json.loads(body) if st == 200 else {}
+check("GET /api/admin/webhooks → 200", 200, st)
+check("5 slot lengkap (events/tx/wallet/algo/user)", True,
+      all(k in jw for k in ("events", "tx", "wallet", "algo", "user")))
+
+st, body = http(f"{BASE}/api/admin/webhooks", "PATCH",
+                {"slot": "bogus", "url": "https://example.com/x"}, H)
+check("PATCH slot invalid → 400", 400, st)
+
+st, body = http(f"{BASE}/api/admin/webhooks", "PATCH",
+                {"slot": "tx", "url": "bukan-url"}, H)
+check("PATCH url bukan URL → 400", 400, st)
+
+st, body = http(f"{BASE}/api/admin/webhooks", "PATCH",
+                {"slot": "tx", "url": "http://localhost:9999/hook"}, H)
+check("PATCH url privat/localhost (SSRF) → 400", 400, st)
+
+st, body = http(f"{BASE}/api/admin/webhooks", "PATCH",
+                {"slot": "tx", "url": "https://example.com/hook"}, H)
+check("PATCH set URL valid → 200", 200, st)
+
+st, body = http(f"{BASE}/api/admin/webhooks", "GET", None, H)
+got_tx = json.loads(body).get("tx") if st == 200 else None
+check("GET mencerminkan URL tersimpan", "https://example.com/hook", got_tx)
+
+st, body = http(f"{BASE}/api/admin/webhooks", "GET")
+check("GET webhooks tanpa sesi → 403", 403, st)
+
+# ── delivery live: slot events → postman-echo, kirim via job ──
+ECHO = "https://postman-echo.com/post"
+st, body = http(f"{BASE}/api/admin/webhooks", "PATCH", {"slot": "events", "url": ECHO}, H)
+check("set slot events → ECHO", 200, st)
+
+st, body = http(f"{BASE}/api/events", "POST",
+                {"url": "https://example.com/", "caption": "E2E webhook alert test"}, H)
+ev = json.loads(body).get("item", {}) if st == 201 else {}
+eid = ev.get("id")
+check("POST event → 201 (antre webhook_alert)", 201, st)
+
+st, body = http(f"{BASE}/api/cron/run-jobs?limit=25", "POST", None,
+                {"Authorization": f"Bearer {CRON}"})
+check("pass cron → 200", 200, st)
+
+st, body = http(f"{URL}/rest/v1/jobs?select=status,last_error&type=eq.webhook_alert&order=id.desc&limit=1",
+                "GET", None, {"apikey": SR, "Authorization": f"Bearer {SR}"})
+jb = (json.loads(body) or [{}])[0] if st == 200 else {}
+check("webhook_alert terkirim ke slot (status done)", "done", jb.get("status"),
+      f"err={str(jb.get('last_error'))[:60]}")
+
+st, body = http(f"{URL}/rest/v1/jobs?select=id&type=eq.user_alert_scan&limit=1",
+                "GET", None, {"apikey": SR, "Authorization": f"Bearer {SR}"})
+check("job siklis user_alert_scan ada (scan user baru)", 1,
+      len(json.loads(body)) if st == 200 else -1)
+
+if eid:
+    http(f"{BASE}/api/events/{eid}", "DELETE", None, H)  # cleanup (silent)
+st, body = http(f"{BASE}/api/admin/webhooks", "PATCH", {"slot": "events", "url": ""}, H)
+check("clear slot events → 200", 200, st)
+st, body = http(f"{BASE}/api/admin/webhooks", "PATCH", {"slot": "tx", "url": ""}, H)
+check("clear slot tx → 200", 200, st)
+
+# ── discord: invite URL diset admin + endpoint publik ──────────
+st, body = http(f"{BASE}/api/admin/webhooks", "PATCH",
+                {"slot": "discord", "url": "https://discord.com/invite/artian"}, H)
+check("set slot discord → 200", 200, st)
+
+st, body = http(f"{BASE}/api/admin/webhooks", "GET", None, H)
+got_dc = json.loads(body).get("discord") if st == 200 else None
+check("GET admin mencerminkan discord", "https://discord.com/invite/artian", got_dc)
+
+st, body = http(f"{BASE}/api/discord")  # publik — tanpa sesi
+jdc = json.loads(body) if st == 200 else {}
+check("GET /api/discord publik → 200 + url", "https://discord.com/invite/artian", jdc.get("url"))
+
+st, body = http(f"{BASE}/api/admin/webhooks", "PATCH", {"slot": "discord", "url": ""}, H)
+check("clear slot discord → 200", 200, st)
+st, body = http(f"{BASE}/api/discord")
+check("discord kosong → url \"\"", "", json.loads(body).get("url") if st == 200 else None)
+
 print(f"\n=== {sum(results)}/{len(results)} PASS ===")
 sys.exit(0 if all(results) else 1)

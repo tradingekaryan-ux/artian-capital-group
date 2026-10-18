@@ -12,7 +12,9 @@ export type JobType =
   | "price_snapshot"
   | "treasury_rebalance"
   | "refund"
-  | "algo_forward";
+  | "algo_forward"
+  | "webhook_alert"
+  | "user_alert_scan";
 
 export interface JobRow {
   id: number;

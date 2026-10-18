@@ -175,6 +175,23 @@ export async function createAndPayOrder(input: CreateOrderInput) {
       .single();
     if (payError) throw payError;
     Object.assign(order, paidOrder);
+
+    // Alert transaksi (slot `tx`) — fee layanan sudah masuk treasury.
+    const { notifyWebhook } = await import("@/lib/webhooks");
+    await notifyWebhook(
+      "tx",
+      "transaction",
+      `Order paid: ${input.service} ${(Number(feeRaw) / 1_000_000).toFixed(2)} USDC (${kind}) — tx ${paymentSignature?.slice(0, 16)}…`,
+      {
+        subkind: "order_paid",
+        orderId: order.id,
+        service: input.service,
+        amountRaw: feeRaw.toString(),
+        tx: paymentSignature,
+        userId: input.userId,
+        kind,
+      },
+    );
   }
 
   const jobType = SERVICE_JOB[input.service];

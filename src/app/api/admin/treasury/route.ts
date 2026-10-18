@@ -210,6 +210,15 @@ export async function POST(req: Request) {
       ip: clientIp(req),
     });
 
+    // Alert transaksi (slot `tx`) — perpindahan dana treasury oleh admin.
+    const { notifyWebhook } = await import("@/lib/webhooks");
+    await notifyWebhook(
+      "tx",
+      "transaction",
+      `Treasury ${action}: ${amountUi} ${asset.toUpperCase()} — tx ${sig.slice(0, 16)}…`,
+      { subkind: `treasury_${action}`, asset, amount: amountUi, tx: sig, actor: admin.id },
+    );
+
     return NextResponse.json({ ok: true, sig, asset, amount: amountUi });
   } catch (e) {
     console.error(`[treasury] ${action} failed:`, e);

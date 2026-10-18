@@ -79,5 +79,15 @@ export async function POST(req: Request) {
     payload: { url, caption: parsed.data.caption, provider: meta.provider ?? null },
     ip,
   });
+
+  // Alert komunitas (slot `events`) — post baru di Event Tracker.
+  const { notifyWebhook } = await import("@/lib/webhooks");
+  await notifyWebhook(
+    "events",
+    "event_created",
+    `New event posted: ${(parsed.data.caption ?? "").slice(0, 140)}`,
+    { id: row.id, url, caption: parsed.data.caption },
+  );
+
   return NextResponse.json({ item: row as EventRow }, { status: 201 });
 }

@@ -560,6 +560,23 @@ async function handleWithdraw(payload: Record<string, unknown>): Promise<void> {
     { onConflict: "user_id,signature,type,mint" },
   );
   await refreshBalance(w.user_id, "mainnet", walletRow?.id);
+
+  // Alert transaksi (slot `tx`) — WD sudah confirmed on-chain.
+  const { notifyWebhook } = await import("@/lib/webhooks");
+  await notifyWebhook(
+    "tx",
+    "transaction",
+    `Withdrawal confirmed: ${(Number(w.amount_raw) / 1_000_000).toFixed(2)} USDC → ${w.destination} (tx ${sig.slice(0, 16)}…)`,
+    {
+      subkind: "withdrawal",
+      id: withdrawalId,
+      amountRaw: String(w.amount_raw),
+      destination: w.destination,
+      tx: sig,
+      userId: w.user_id,
+      kind: "mainnet",
+    },
+  );
 }
 
 /* ───────────────── swap (hanya mainnet/live — Jupiter tidak mendukung devnet) ───────────────── */
@@ -797,6 +814,88 @@ async function handleAlgoForward(payload: Record<string, unknown>): Promise<void
   if (failed.length > 0) throw new Error(`algo_forward: ${failed.length} slot masih gagal`);
 }
 
+/* ───────────────── webhook_alert (POST ke URL slot admin) ───────────────── */
+/**
+ * Kirim payload JSON ke URL slot (dibaca ulang dari pricing_config saat
+ * eksekusi; slot di-clear → skip). Envelope:
+ * {event, slot, text, content, ts, data} — `content` = alias Discord.
+ * Gagal (network / non-2xx) → throw → retry backoff30s×3 seperti job lain.
+ */
+async function handleWebhookAlert(payload: Record<string, unknown>): Promise<void> {
+  const slot = String(payload.slot ?? "");
+  const { WEBHOOK_SLOTS, getWebhookUrl } = await import("@/lib/webhooks");
+  if (!(WEBHOOK_SLOTS as readonly string[]).includes(slot)) return; // payload rusak → selesai
+  const url = await getWebhookUrl(slot as Parameters<typeof getWebhookUrl>[0]);
+  if (!url) return; // sudah di-clear admin → skip
+
+  const text = String(payload.text ?? "");
+  const body = JSON.stringify({
+    event: String(payload.kind ?? "alert"),
+    slot,
+    text,
+    content: text,
+    ts: new Date().toISOString(),
+    data: payload.data ?? {},
+  });
+
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 8_000);
+  try {
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "User-Agent": "ArtianAlert/1.0" },
+      body,
+      signal: ctrl.signal,
+      redirect: "manual", // redirect ke tujuan lain dianggap gagal (SSRF)
+    });
+    if (!res.ok) throw new Error(`webhook HTTP ${res.status}`);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/* ───────────────── user_alert_scan (siklis — deteksi user baru) ───────────────── */
+/**
+ * Registrasi terjadi langsung di GoTrue (signUp client-side) — tidak ada
+ * hook server. Job siklis (tiap pass cron) membandingkan created_at user
+ * terbaru dengan marker di pricing_config; user baru → alert slot `user`.
+ * Scan PERTAMA menandai "sekarang" tanpa memberi alert (user lama tidak
+ * di-spam saat fitur baru diluncurkan).
+ */
+async function handleUserAlertScan(): Promise<void> {
+  const db = supabaseAdmin();
+  const KEY = "webhook_user_scan_state";
+  const now = new Date().toISOString();
+  const { data: row } = await db.from("pricing_config").select("value").eq("key", KEY).maybeSingle();
+  const since = (row?.value as { since?: unknown } | null)?.since;
+  if (typeof since !== "string" || !since) {
+    await db.from("pricing_config").upsert({ key: KEY, value: { since: now } }, { onConflict: "key" });
+    return;
+  }
+
+  const { data: list } = await db.auth.admin.listUsers({ page: 1, perPage: 200 });
+  const fresh = (list?.users ?? [])
+    .filter((u) => (u.created_at ?? "") > since && (u.created_at ?? "") <= now)
+    .sort((a, b) => ((a.created_at ?? "") < (b.created_at ?? "") ? -1 : 1));
+  if (!fresh.length) return;
+
+  const { notifyWebhook } = await import("@/lib/webhooks");
+  for (const u of fresh) {
+    const username = (u.user_metadata as { username?: unknown } | null)?.username;
+    const uname = typeof username === "string" && username ? ` (@${username})` : "";
+    await notifyWebhook(
+      "user",
+      "user_registered",
+      `New user registered: ${u.email ?? u.id}${uname}`,
+      { userId: u.id, email: u.email ?? null, username: uname ? uname.slice(2, -1) : null, createdAt: u.created_at },
+    );
+  }
+  // Majukan marker ke user terakhir agar tidak diumumkan dua kali.
+  await db
+    .from("pricing_config")
+    .upsert({ key: KEY, value: { since: fresh[fresh.length - 1].created_at } }, { onConflict: "key" });
+}
+
 const handlers: Record<JobType, Handler> = {
   create_token: handleCreateToken,
   create_pool: handleCreatePool,
@@ -810,6 +909,8 @@ const handlers: Record<JobType, Handler> = {
   treasury_rebalance: async () => handleTreasuryRebalance(),
   refund: handleRefund,
   algo_forward: handleAlgoForward,
+  webhook_alert: handleWebhookAlert,
+  user_alert_scan: handleUserAlertScan,
 };
 
 export async function runPendingJobs(limit = 5): Promise<{ done: number; failed: number }> {
@@ -839,14 +940,21 @@ export async function runPendingJobs(limit = 5): Promise<{ done: number; failed:
 export async function maybeScheduleCyclic(): Promise<void> {
   const db = supabaseAdmin();
   // treasury_rebalance tidak lagi dijadwalkan — treasury tidak membayar gas.
-  for (const type of ["price_snapshot"] as const) {
-    const { data } = await db
-      .from("jobs")
-      .select("id")
-      .eq("type", type)
-      .in("status", ["pending", "running"])
-      .limit(1);
-    if (!data?.length) await enqueue(type, {});
+  // user_alert_scan: deteksi user baru (GoTrue) tiap pass.
+  for (const type of ["price_snapshot", "user_alert_scan"] as const) {
+    try {
+      const { data } = await db
+        .from("jobs")
+        .select("id")
+        .eq("type", type)
+        .in("status", ["pending", "running"])
+        .limit(1);
+      if (!data?.length) await enqueue(type, {});
+    } catch (e) {
+      // Contoh: constraint jobs_type_check belum ter-update (migrasi tertunda)
+      // — jangan jatuhkan seluruh pass cron karena satu tipe job.
+      console.error(`[cyclic] gagal jadwalkan ${type}:`, e);
+    }
   }
 }
 

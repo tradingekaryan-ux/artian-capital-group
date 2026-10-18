@@ -7,6 +7,7 @@ import { routing } from "@/i18n/routing";
 import { Nav } from "@/components/nav";
 import { Footer } from "@/components/footer";
 import { Ticker } from "@/components/ticker";
+import { DiscordButton } from "@/components/discord-button";
 import { SITE } from "@/lib/config";
 import "../globals.css";
 
@@ -73,6 +74,7 @@ export default async function LocaleLayout({
             {children}
           </main>
           <Footer />
+          <DiscordButton />
         </NextIntlClientProvider>
       </body>
     </html>
