@@ -1,8 +1,40 @@
 import { notFound } from "next/navigation";
+import type { Metadata } from "next";
 import { setRequestLocale } from "next-intl/server";
 import { supabaseAdmin, requireUser } from "@/lib/db/client";
 import { getLatestSub, isSubActive, ALGO_FEED_PAGE, type AlgoRow } from "@/lib/algos";
+import { SITE } from "@/lib/config";
 import { AlgoView } from "@/components/algos/algo-view";
+
+/** og-meta → link algo yang dibagikan (mis. di Discord) menghasilkan kartu preview jelas. */
+export async function generateMetadata({
+  params,
+}: PageProps<"/[locale]/algos/[id]">): Promise<Metadata> {
+  const { id } = await params;
+  try {
+    const { data } = await supabaseAdmin()
+      .from("algos")
+      .select("name, description, price_usdc, billing, is_active")
+      .eq("id", id)
+      .maybeSingle();
+    if (!data?.is_active) return {};
+    const description = `${data.description || `Signal algo ${data.name} on Solana.`} Subscribe for ${data.price_usdc} USDC ${data.billing}.`;
+    return {
+      title: data.name,
+      description,
+      openGraph: {
+        title: data.name,
+        description,
+        url: `${SITE.url}/algos/${id}`,
+        siteName: SITE.name,
+        type: "website",
+        images: [{ url: "/icon.png", width: 512, height: 512, type: "image/png" }],
+      },
+    };
+  } catch {
+    return {};
+  }
+}
 
 export default async function AlgoDetailPage({
   params,

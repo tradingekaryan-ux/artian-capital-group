@@ -99,49 +99,45 @@ export async function notifyWebhook(
   }
 }
 
-/* ───────────── Envelope payload + styling Discord ───────────── */
-
-export interface DiscordEmbed {
-  /** Nama domain di atas judul — membuat embed terbaca sebagai "website card". */
-  provider?: { name: string };
-  title?: string;
-  url?: string;
-  description?: string;
-  color?: number;
-}
+/* ───────────── Envelope payload (teks biasa utk Discord) ───────────── */
 
 /**
- * Body POST ke URL slot.
- * - **Discord**: memakai `username` + `avatar_url` + `embeds` (tampilan rapi,
- *   `content` sengaja dikosongkan agar kalimat tidak dobel).
- * - **Receiver generik** (n8n/Zapier/postman): baca `text` (ringkasan + URL),
- *   `url`, dan `data` (payload mentah apa adanya).
+ * Bentuk body POST. **Tanpa embed** — `content` berupa teks biasa yang MEMUAT
+ * URL mentah, sehingga Discord mendeteksi link-nya sendiri lalu membuat
+ * *website card* (preview otomatis dari og-meta halaman tujuan).
+ *
+ * Catatan format: URL ditulis polos (bukan `[label](url)` / `<url>`) —
+ * Discord TIDAK membuka kartu untuk link yang dibungkus markdown/angle bracket.
  */
 export interface WebhookEnvelope {
   event: string;
   slot: string;
+  /** Pesan utk receiver generik (n8n/Zapier/postman) — identik dengan `content`. */
   text: string;
-  /** Kosong di Discord — tampilan ada di `embeds`. */
+  /** Teks yang dikirim ke Discord (tanpa embed) — link dideteksi → website card. */
   content: string;
+  /** URL utama utk receiver generik (events = post; tx = explorer; lainnya = halaman situs). */
   url: string;
   ts: string;
   data: Record<string, unknown>;
+  /** Nama pengirim di Discord (tampil di atas pesan). */
   username: string;
   avatar_url: string;
-  embeds: DiscordEmbed[];
+  /** Selalu kosong — tampilan memakai teks biasa, bukan embed. */
+  embeds: [];
 }
 
-/** Nama pengirim + warna embed per slot (palet brand: lime #d8ff3e + aksen). */
-const SLOT_STYLE: Record<WebhookSlot, { username: string; color: number }> = {
-  events: { username: "Artian · Event Tracker", color: 0x7c3aed },
-  tx: { username: "Artian · Transactions", color: 0x22c55e },
-  wallet: { username: "Artian · Wallets", color: 0x3b82f6 },
-  algo: { username: "Artian · Algos", color: 0xd8ff3e },
-  user: { username: "Artian · Users", color: 0xf59e0b },
-  token: { username: "Artian · Tokens", color: 0x06b6d4 },
+/** Nama pengirim per slot. */
+const SLOT_USERNAME: Record<WebhookSlot, string> = {
+  events: "Artian · Event Tracker",
+  tx: "Artian · Transactions",
+  wallet: "Artian · Wallets",
+  algo: "Artian · Algos",
+  user: "Artian · Users",
+  token: "Artian · Tokens",
 };
 
-/** Jenis transaksi (berdasar `data.subkind`) → label pendek utk judul alert. */
+/** Jenis transaksi (berdasar `data.subkind`) → label pendek utk baris judul. */
 const TX_LABEL: Record<string, string> = {
   order_paid: "Order paid",
   withdrawal: "Withdrawal confirmed",
@@ -163,18 +159,9 @@ function raw(data: Record<string, unknown>, key: string): string {
   return String(v).trim();
 }
 
-/** Domain utk provider embed (tampilan kartu website). */
-function domainOf(url: string): string {
-  try {
-    return new URL(url).hostname;
-  } catch {
-    return siteBase().replace(/^https?:\/\//, "");
-  }
-}
-
 /**
- * `?cluster=` link explorer — `demo` (wallet/token dari dompet latihan) selalu
- * devnet; sisanya mengikuti cluster situs (`NEXT_PUBLIC_SOLANA_CLUSTER`).
+ * `?cluster=` link explorer — `demo` (dompet latihan) selalu devnet;
+ * sisanya mengikuti cluster situs (`NEXT_PUBLIC_SOLANA_CLUSTER`).
  */
 function clusterParam(kind: string): string {
   return kind === "demo" ? "devnet" : CLUSTER;
@@ -191,13 +178,13 @@ export function explorerAddressUrl(address: string, kind?: string): string {
 }
 
 /**
- * URL utama alert — diisi sebagai field `url` top-level DAN disisipkan ke
- * `text` utk receiver generik. Events memakai URL post eksternal (yang
- * dipantau komunitas), tx memakai link explorer, slot lain halaman situs.
+ * URL utama alert — diisi sebagai field `url` top-level utk receiver generik.
+ * Events memakai URL post eksternal (yang dipantau komunitas), tx memakai
+ * link explorer, slot lain halaman situs. (Discord memakai URL di dalam teks.)
  */
 function primaryUrl(slot: WebhookSlot, data: Record<string, unknown>): string {
   const base = siteBase();
-  const ext = typeof data.url === "string" ? data.url.trim() : "";
+  const ext = raw(data, "url");
   const str = (key: string) => raw(data, key);
 
   switch (slot) {
@@ -211,29 +198,14 @@ function primaryUrl(slot: WebhookSlot, data: Record<string, unknown>): string {
     case "user":
       return `${base}/admin/users`;
     case "tx": {
-      // Yang dicari pembaca: bukti on-chain → langsung ke explorer.
       const sig = str("tx") || str("sig");
       return sig ? explorerTxUrl(sig, str("kind")) : `${base}/admin`;
     }
   }
 }
 
-/** Batas konten Discord 2000 char — sisakan ruang utk URL. */
+/** Batas konten Discord 2000 char. */
 const CONTENT_LIMIT = 1900;
-
-/**
- * Sisipkan URL ke `text` utk receiver generik (n8n/Zapier/postman).
- * Discord TIDAK memakai `text`/`content` — tampilan Discord = `embeds` saja,
- * jadi kalimat ini tidak ikut tampil dobel di channel.
- */
-function withUrl(text: string, url: string): string {
-  if (!url) return text;
-  if (text.includes(url)) return text;
-  const joined = text ? `${text} — ${url}` : url;
-  if (joined.length <= CONTENT_LIMIT) return joined;
-  const room = Math.max(0, CONTENT_LIMIT - url.length - 4);
-  return `${text.slice(0, room).trimEnd()} … ${url}`;
-}
 
 /** Signature base58 → `3yS7Qm9…YwZxCvBnHp` (alamat/tanda tangan tetap utuh di `data`). */
 function short(value: string): string {
@@ -246,99 +218,84 @@ function kindLabel(kind: string): string {
   return kind === "demo" ? "devnet" : "mainnet";
 }
 
-/** Tautan markdown Discord (`[label](url)`). */
-function mdLink(label: string, url: string): string {
-  return `[${label}](${url})`;
-}
-
 /**
- * Isi embed per slot — DIRANCANG MINIMAL sesuai permintaan (18 Okt malam):
- *   events — "website card": provider (domain) + judul link + caption saja
- *   wallet — teks: `New wallet — mainnet` + alamat lengkap
- *   user   — teks satu baris: `New user — @username`
- *   algo   — website card: provider + judul link ke halaman algo
- *   token  — website card: provider + judul link + 2 tautan (halaman token & explorer)
- *   tx     — `New Transaction — <jenis>` + signature + tautan explorer
- * Tanpa field, tanpa timestamp, tanpa footer (sengaja — jangan terlalu detail).
+ * Pesan tampilan per slot — **teks biasa baris per baris** (tanpa embed),
+ * URL polos di baris terakhir supaya Discord mendeteksi & membuat kartu:
+ *
+ *   events → "New event posted" / caption (≤280) / URL post
+ *   wallet → "New wallet — mainnet" / alamat lengkap
+ *   user   → "New user — @username"
+ *   algo   → "New algo — <nama>" / URL halaman algo
+ *   token  → "New token — <nama> (SIMBOL) · mainnet" / URL halaman token / URL mint di explorer
+ *   tx     → "New Transaction — <jenis>" / tx <signature> / URL explorer
+ *
+ * `fallback` dipakai hanya bila data tidak cukup utk membangun pesan.
  */
-function embedFor(slot: WebhookSlot, data: Record<string, unknown>, url: string, color: number): DiscordEmbed {
+function messageFor(slot: WebhookSlot, data: Record<string, unknown>, fallback: string): string {
   const str = (key: string) => raw(data, key);
   const base = siteBase();
+  const lines: string[] = [];
 
   switch (slot) {
     case "events": {
+      lines.push("New event posted");
       const caption = str("caption");
-      return {
-        provider: { name: domainOf(url) },
-        title: "New event posted",
-        url,
-        ...(caption ? { description: caption.slice(0, 280) } : {}),
-        color,
-      };
+      if (caption) lines.push(caption.slice(0, 280));
+      lines.push(str("url") || `${base}/events`);
+      break;
     }
     case "wallet": {
-      const address = str("publicKey");
-      return {
-        title: `New wallet — ${kindLabel(str("kind"))}`,
-        ...(address ? { description: address } : {}),
-        color,
-      };
+      lines.push(`New wallet — ${kindLabel(str("kind"))}`);
+      if (str("publicKey")) lines.push(str("publicKey"));
+      break;
     }
     case "user": {
       const username = str("username");
-      const email = str("email");
-      return {
-        title: `New user — ${username ? `@${username}` : email || "user"}`,
-        color,
-      };
+      lines.push(`New user — ${username ? `@${username}` : str("email") || "user"}`);
+      break;
     }
     case "algo": {
-      const name = str("name");
-      return {
-        provider: { name: domainOf(url) },
-        title: `New algo — ${name || "algo baru"}`.slice(0, 256),
-        url,
-        color,
-      };
+      lines.push(`New algo — ${str("name") || "algo baru"}`);
+      lines.push(str("algoId") ? `${base}/algos/${str("algoId")}` : `${base}/algos`);
+      break;
     }
     case "token": {
-      const name = str("name");
-      const symbol = str("symbol");
       const mint = str("mint");
-      const kind = kindLabel(str("kind"));
-      const lines = [`${base}/token/${mint}`, mint ? explorerAddressUrl(mint, str("kind")) : ""]
-        .filter(Boolean)
-        .map((u, i) => mdLink(i === 0 ? "Token page" : "Mint · Solana Explorer", u));
-      return {
-        provider: { name: domainOf(url) },
-        title: `New token — ${name || symbol || "token baru"}${symbol ? ` (${symbol})` : ""} · ${kind}`.slice(0, 256),
-        url,
-        ...(lines.length ? { description: lines.join("\n") } : {}),
-        color,
-      };
+      const name = str("name") || str("symbol") || "token baru";
+      const symbol = str("symbol");
+      lines.push(
+        `New token — ${symbol && symbol !== name ? `${name} (${symbol})` : name} · ${kindLabel(str("kind"))}`,
+      );
+      if (mint) {
+        lines.push(`${base}/token/${mint}`);
+        lines.push(explorerAddressUrl(mint, str("kind")));
+      }
+      break;
     }
     case "tx": {
+      lines.push(`New Transaction — ${TX_LABEL[str("subkind")] ?? "Transaction"}`);
       const sig = str("tx") || str("sig");
-      const explorer = sig ? explorerTxUrl(sig, str("kind")) : "";
-      const lines = [sig ? `tx \`${short(sig)}\`` : "", explorer ? mdLink("View on Solana Explorer", explorer) : ""]
-        .filter(Boolean);
-      return {
-        title: `New Transaction — ${TX_LABEL[str("subkind")] ?? "Transaction"}`,
-        ...(explorer ? { url: explorer } : {}),
-        ...(lines.length ? { description: lines.join("\n") } : {}),
-        color,
-      };
+      if (sig) {
+        lines.push(`tx ${short(sig)}`);
+        lines.push(explorerTxUrl(sig, str("kind")));
+      }
+      break;
     }
   }
+
+  const msg = lines.join("\n").trim();
+  if (!msg) return fallback.slice(0, CONTENT_LIMIT);
+  if (msg.length <= CONTENT_LIMIT) return msg;
+  // Terlalu panjang → buang baris tengah, pertahankan judul + URL terakhir.
+  return `${lines[0]}\n${lines[lines.length - 1]}`.slice(0, CONTENT_LIMIT);
 }
 
 /**
- * Bentuk body POST final — DIRANCANG UNTUK DISCORD LEBIH DULU:
- * - `content` = `""` → Discord menampilkan `embeds` saja (tidak ada kalimat dobel).
- * - `embeds` = SATU embed ringkas per slot (lihat `embedFor`) — tanpa field,
- *   tanpa timestamp, tanpa footer. Events & algo tampil sebagai kartu website
- *   (provider = domain, judul bisa diklik).
- * - `text` + `url` + `data` tetap utuh utk receiver generik (n8n/Zapier/postman).
+ * Bentuk body POST final — **tanpa embed sama sekali**:
+ * - `content` = pesan teks biasa berisi URL polos → Discord mendeteksi link
+ *   dan menampilkan *website card* sendiri (preview og-meta halaman tujuan).
+ * - `embeds` = `[]` (tidak ada judul/field/timestamp buatan kita).
+ * - `text` identik dgn `content` utk receiver generik; `url` + `data` utuh.
  */
 export function buildWebhookEnvelope(input: {
   slot: WebhookSlot;
@@ -348,21 +305,20 @@ export function buildWebhookEnvelope(input: {
   ts?: string;
 }): WebhookEnvelope {
   const data = input.data ?? {};
-  const style = SLOT_STYLE[input.slot];
   const url = primaryUrl(input.slot, data);
-  const text = withUrl(input.text, url);
+  const content = messageFor(input.slot, data, input.text);
   const ts = input.ts ?? new Date().toISOString();
 
   return {
     event: input.kind,
     slot: input.slot,
-    text,
-    content: "",
+    text: content,
+    content,
     url,
     ts,
     data,
-    username: style.username,
+    username: SLOT_USERNAME[input.slot],
     avatar_url: `${siteBase()}/icon.png`,
-    embeds: [embedFor(input.slot, data, url, style.color)],
+    embeds: [],
   };
 }

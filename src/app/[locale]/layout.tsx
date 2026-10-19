@@ -24,11 +24,20 @@ export function generateStaticParams() {
 }
 
 export async function generateMetadata(): Promise<Metadata> {
+  const description =
+    "A finance platform for token launches, crypto algo trading and the markets you follow — create a Solana token with a liquidity pool, subscribe to signal algos, and track live market data. Pay in USDC, withdraw anytime.";
   return {
     metadataBase: new URL(SITE.url),
     title: { default: SITE.name, template: `%s · ${SITE.name}` },
-    description:
-      "A finance platform for token launches, crypto algo trading and the markets you follow — create a Solana token with a liquidity pool, subscribe to signal algos, and track live market data. Pay in USDC, withdraw anytime.",
+    description,
+    // og-meta → link yang dibagikan (mis. di Discord) menghasilkan kartu preview jelas.
+    openGraph: {
+      siteName: SITE.name,
+      type: "website",
+      url: SITE.url,
+      description,
+      images: [{ url: "/icon.png", width: 512, height: 512, type: "image/png" }],
+    },
   };
 }
 

@@ -370,13 +370,24 @@ export async function generateMetadata({
   try {
     const { data } = await supabaseAdmin()
       .from("tokens")
-      .select("name, symbol, description")
+      .select("name, symbol, description, logo_uri")
       .eq("mint", mint)
       .maybeSingle();
     if (!data) return {};
+    const title = `${data.name} ($${data.symbol})`;
+    const description = data.description ?? `${data.name} on Solana — live market data on Artian.`;
     return {
-      title: `${data.name} ($${data.symbol})`,
-      description: data.description ?? `${data.name} on Solana — live market data on Artian.`,
+      title,
+      description,
+      // og-meta → kartu preview jelas saat link token dibagikan (mis. di Discord).
+      openGraph: {
+        title,
+        description,
+        url: `${SITE.url}/token/${mint}`,
+        siteName: SITE.name,
+        type: "website",
+        images: [{ url: data.logo_uri || "/icon.png" }],
+      },
     };
   } catch {
     return {};
