@@ -1,6 +1,7 @@
 import { getTranslations } from "next-intl/server";
 import { formatDate } from "@/lib/format";
 import type { AchievementCategory, AchievementStatus } from "@/lib/achievements";
+import { CertificateDownloadButton } from "./certificate-download-button";
 
 /** Gllyph segel per kategori (tema neobrutalistis: segel bulat ber-border tebal). */
 const SEAL: Record<AchievementCategory, string> = {
@@ -15,7 +16,14 @@ const SEAL: Record<AchievementCategory, string> = {
  * - terbuka: card lime + lencana "Achieved" + tanggal
  * - terkunci: card putih + lencana "Locked" + progres bar `count/threshold`
  */
-export async function CertificatesView({ items }: { items: AchievementStatus[] }) {
+export async function CertificatesView({
+  items,
+  recipient,
+}: {
+  items: AchievementStatus[];
+  /** Nama penerima utk gambar sertifikat (display_name → username → email). */
+  recipient: string;
+}) {
   const t = await getTranslations("certificates");
   const done = items.filter((i) => i.unlocked).length;
   const pctTotal = items.length ? Math.round((done / items.length) * 100) : 0;
@@ -92,6 +100,19 @@ export async function CertificatesView({ items }: { items: AchievementStatus[] }
                     style={{ width: `${pct}%` }}
                   />
                 </div>
+                {/* Download sertifikat PNG — hanya untuk sertifikat yg terbuka. */}
+                {c.unlocked && (
+                  <CertificateDownloadButton
+                    label={t("download")}
+                    image={{
+                      recipient,
+                      achievement: t(`items.${c.id}.name`),
+                      detail: t(`items.${c.id}.desc`),
+                      date: c.achievedAt ? formatDate(c.achievedAt) : "",
+                      serial: c.id,
+                    }}
+                  />
+                )}
               </div>
             </div>
           );

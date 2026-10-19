@@ -31,7 +31,7 @@ export default async function DashboardCertificatesPage({
       .eq("kind", "mainnet")
       .eq("status", "live"),
     db.from("algos").select("created_at", { count: "exact", head: true }).eq("user_id", user.id),
-    db.from("profiles").select("created_at").eq("user_id", user.id).maybeSingle(),
+    db.from("profiles").select("created_at, username, display_name").eq("user_id", user.id).maybeSingle(),
   ]);
 
   /** Waktu capaian pertama kategori (token/algo paling awal) — utk tanggal sertifikat. */
@@ -47,16 +47,23 @@ export default async function DashboardCertificatesPage({
     return (data as { created_at?: string } | null)?.created_at ?? null;
   };
 
+  const p = profile as {
+    created_at?: string;
+    username?: string | null;
+    display_name?: string | null;
+  } | null;
+  // Nama penerima sertifikat: display_name → username → bagian depan email.
+  const recipient = p?.display_name || p?.username || user.email?.split("@")[0] || "Artian Member";
+
   const tally: AchievementTally = {
     tokenDevnet: devnet.count ?? 0,
     tokenMainnet: mainnet.count ?? 0,
     algo: algos.count ?? 0,
-    memberSince:
-      ((profile as { created_at?: string } | null)?.created_at) ?? new Date(0).toISOString(),
+    memberSince: p?.created_at ?? new Date(0).toISOString(),
     tokenDevnetAt: (devnet.count ?? 0) > 0 ? await firstAt("tokens", "demo") : null,
     tokenMainnetAt: (mainnet.count ?? 0) > 0 ? await firstAt("tokens", "mainnet") : null,
     algoAt: (algos.count ?? 0) > 0 ? await firstAt("algos", null) : null,
   };
 
-  return <CertificatesView items={evaluateAchievements(tally)} />;
+  return <CertificatesView items={evaluateAchievements(tally)} recipient={recipient} />;
 }

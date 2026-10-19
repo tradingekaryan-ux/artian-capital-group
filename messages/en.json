@@ -240,6 +240,7 @@
     "achieved": "Achieved",
     "achievedOn": "Achieved {date}",
     "progressOf": "{count} / {threshold}",
+    "download": "Download PNG",
     "items": {
       "member": { "name": "New Member", "desc": "Registered an Artian Capital Group account" },
       "token-devnet-1": { "name": "Devnet Token Creator", "desc": "Created1 token on your devnet practice wallet" },
