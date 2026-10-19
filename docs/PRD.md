@@ -5,7 +5,7 @@
 |---|---|
 | **Versi** | 1.3 |
 | **Tanggal** | 18 Oktober 2026 |
-| **Status** | **LIVE** di Cloudflare Workers; smoke on-chain devnet lulus; mode demo + multi-wallet + **arsip wallet**; **treasury deposit/withdraw USDC+SOL di admin panel**; **algo marketplace + event tracker + webhook alert 6 slot (format teks tanpa embed → kartu link dari Discord) + tombol Discord + halaman FAQ**; migrasi `0001–0010`; `lint + typecheck + test (46) + build` hijau |
+| **Status** | **LIVE** di Cloudflare Workers; smoke on-chain devnet lulus; mode demo + multi-wallet (**buat wallet tanpa prompt label — nama otomatis + ganti nama inline**); **treasury deposit/withdraw USDC+SOL di admin panel**; **algo marketplace + event tracker + webhook alert 6 slot (format teks tanpa embed → kartu link dari Discord) + tombol Discord + halaman FAQ**; migrasi `0001–0010`; `lint + typecheck + test (50) + build` hijau |
 | **Penyesuaian** | Disesuaikan dengan implementasi aktual (lihat §13) |
 | **Layanan fase 1** | Pembuatan token crypto (Solana) + Liquidity Pool + Market Data |
 | **Target pasar** | Global — **Bahasa Inggris saja** (keputusan 17 Okt: `messages/` hanya `en.json`, URL tanpa prefix; `messages/id.json` dihapus) |
@@ -162,7 +162,7 @@ Total supply token
 
 ### F-J. Mode Demo (Devnet) & Multi-Wallet
 Tujuan: user bisa **belajar** membuat token & liquidity pool di jaringan uji sebelum memakai dana sungguhan.
-- **Multi-wallet**: setiap user dapat membuat **banyak wallet mainnet** (nama otomatis `Wallet 1/2/…`, tampil di daftar switcher — tanpa prompt label) dan **maksimal 1 wallet demo (devnet)**. Wallet aktif dipilih lewat switcher di dashboard (cookie `wid`); saldo, token, dan orders mengikuti wallet aktif.
+- **Multi-wallet**: setiap user dapat membuat **banyak wallet mainnet** (nama otomatis `Wallet 1/2/…`, tampil di daftar switcher — tanpa prompt label) dan **maksimal 1 wallet demo (devnet)**. **Ganti nama inline** (tombol ✎ per baris → input inline, Esc/✕ batal; `PATCH /api/wallet/[id]`, label wajib non-kosong maks 40 char, audit `wallet_renamed`) — berlaku juga untuk wallet aktif & terarsip. Wallet aktif dipilih lewat switcher di dashboard (cookie `wid`); saldo, token, dan orders mengikuti wallet aktif.
 - **Arsip wallet (soft-delete, 18 Okt)**: user bisa mengarsipkan wallet non-aktif (tombol ✕) — `wallets.archived_at` diisi, wallet hilang dari daftar & tidak bisa jadi aktif (dicek di `getActiveWallet` + switch route; cookie basi lintas-device diabaikan). Wallet **aktif tidak bisa diarsipkan** — guard memakai resolusi `getActiveWallet()` (cookie `wid` ATAU fallback mainnet pertama; cek cookie saja TIDAK cukup karena cookie bisa absen — terbukti saat E2E live, sudah diperbaiki). Wallet terarsip **tetap terlihat di dashboard admin** (badge Archived). Indeks unik demo hanya menghitung wallet non-arsip — mengarsipkan demo membebaskan kuota "1 demo" untuk membuat yang baru. Untuk admin, daftar wallet di dashboard juga menampilkan **entri virtual "Treasury wallet"** (display-only: tanpa switch, tanpa arsip).
 - **Wallet demo = sandbox Devnet**:
   - Deposit **manual**: user menyalin alamat wallet demo lalu meminta (faucet) SOL & USDC devnet dari situs eksternal — `faucet.solana.com` (SOL) dan `faucet.circle.com` (USDC, jaringan Solana Devnet) — dengan menempel alamat wallet sendiri. Tanpa deposit otomatis, tanpa airdrop in-app.

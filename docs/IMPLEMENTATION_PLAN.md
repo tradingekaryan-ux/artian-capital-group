@@ -205,6 +205,7 @@ events(id uuid pk, url text, caption text, meta jsonb default '{}',
 | `GET /api/wallet` | daftar wallet user (mainnet multi + demo, non-arsip) + wallet aktif | session |
 | `POST /api/wallet` | buat wallet baru: `{action:"create_mainnet",label?}` atau `{action:"create_demo"}` (maks 1 demo) → set cookie `wid` | session + rate limit |
 | `DELETE /api/wallet/[id]` | arsipkan (soft-delete) wallet non-aktif milik sendiri; wallet aktif ditolak (409, switch dulu); audit + rate limit 10/jam | session |
+| `PATCH /api/wallet/[id]` | **ganti nama (label) wallet** milik sendiri: `{label}` → `normalizeWalletLabel()` (`src/lib/wallet-label.ts`: trim, buang kontrol, maks 40; kosong → 400); boleh wallet aktif/non-aktif/terarsip; audit `wallet_renamed` + rate limit 30/jam | session |
 | `POST /api/wallet/active` | pindah wallet aktif: `{walletId}` → validasi kepemilikan + non-arsip → set cookie `wid` | session |
 | `GET /api/wallet/balance` | saldo USDC/SOL on-chain wallet **aktif** (baca RPC per kind) | session |
 | `POST /api/wallet/withdraw` | ajukan withdrawal + kirim OTP email (hanya wallet mainnet) | session + rate limit |
@@ -300,7 +301,7 @@ events(id uuid pk, url text, caption text, meta jsonb default '{}',
 ## 7. Strategi Testing
 | Tipe | Alat | Cakupan |
 |---|---|---|
-| Unit ✅ | Vitest | pricing calculator (create_token/pool/add/remove/withdraw + swap fee), format (raw USDC/angka), resolusi jaringan per-kind (`network.test.ts`: cluster/USDC-mint/treasury demo) & **envelope webhook** (`webhooks.test.ts`: `embeds: []` (tanpa embed), `content` = teks baris-per-baris **dgn URL polos** (utk deteksi link Discord), format per slot (events/wallet/user/algo/token + `tx` + link explorer), `text` = `content` utk receiver generik, batas 1900 char) — **hijau (46 kasus)** |
+| Unit ✅ | Vitest | pricing calculator (create_token/pool/add/remove/withdraw + swap fee), format (raw USDC/angka), resolusi jaringan per-kind (`network.test.ts`: cluster/USDC-mint/treasury demo), **envelope webhook** (`webhooks.test.ts`: `embeds: []` (tanpa embed), `content` = teks baris-per-baris **dgn URL polos** (utk deteksi link Discord), format per slot (events/wallet/user/algo/token + `tx` + link explorer), `text` = `content` utk receiver generik, batas 1900 char) & **normalisasi label wallet** (`wallet-label.test.ts`: trim/kontrol/batas 40/hasil kosong → null) — **hijau (50 kasus)** |
 | Unit (tertunda) | Vitest | enkripsi AES-GCM, state machine order, validasi input |
 | Integration (tertunda) | Vitest + mock RPC | token-create tx builder (assert instruksi), withdrawal flow |
 | E2E manual (tertunda) | `scripts/devnet-smoke.ts` | topup→create token→pool→swap→withdraw di devnet |

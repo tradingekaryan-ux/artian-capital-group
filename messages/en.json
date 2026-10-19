@@ -113,6 +113,9 @@
       "switched": "Wallet switched",
       "archive": "Archive wallet",
       "confirmArchive": "Archive this wallet? It will be hidden from your list. Admins can still view it.",
+      "rename": "Rename wallet",
+      "renameInput": "Wallet name",
+      "renameSave": "Save name",
       "treasuryBadge": "TREASURY",
       "treasuryLabel": "Treasury wallet"
     },

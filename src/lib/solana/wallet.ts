@@ -4,6 +4,7 @@ import { supabaseAdmin } from "@/lib/db/client";
 import { generateWalletKeypair, keypairFromEncrypted } from "@/lib/solana/keypair";
 import { rpcRead } from "@/lib/solana/connection";
 import { ensureProfile } from "@/lib/profiles";
+import { normalizeWalletLabel } from "@/lib/wallet-label";
 import { usdcMintFor, LAMPORTS_PER_SOL, type WalletKind } from "@/lib/config";
 import type { Keypair } from "@solana/web3.js";
 
@@ -108,7 +109,8 @@ export async function createMainnetWallet(userId: string, label?: string): Promi
     .select("id", { count: "exact", head: true })
     .eq("user_id", userId)
     .eq("kind", "mainnet");
-  const finalLabel = label?.trim() || `Wallet ${(count ?? 0) + 1}`;
+  // Label dikosongkan/dibatalkan user → nama otomatis "Wallet 1", "Wallet 2", …
+  const finalLabel = normalizeWalletLabel(label) || `Wallet ${(count ?? 0) + 1}`;
   return insertWallet(userId, "mainnet", finalLabel);
 }
 
@@ -192,6 +194,32 @@ export async function archiveWallet(userId: string, walletId: string): Promise<W
   const { data: updated, error } = await db
     .from("wallets")
     .update({ archived_at: new Date().toISOString() })
+    .eq("id", walletId)
+    .select(SELECT_WALLET)
+    .single();
+  if (error) throw error;
+  return updated as WalletRow;
+}
+
+/**
+ * Ganti nama (label) wallet milik userId — dipakai PATCH /api/wallet/[id].
+ * Label dinormalisasi (trim/kontrol/batas40) — kosong → "Label required".
+ * Wallet terarsip boleh diganti namanya (masih terlihat di panel admin).
+ */
+export async function renameWallet(userId: string, walletId: string, label: string): Promise<WalletRow> {
+  const next = normalizeWalletLabel(label);
+  if (!next) throw new Error("Label required");
+  const db = supabaseAdmin();
+  const { data: row } = await db
+    .from("wallets")
+    .select("id")
+    .eq("id", walletId)
+    .eq("user_id", userId)
+    .maybeSingle();
+  if (!row) throw new Error("Wallet not found");
+  const { data: updated, error } = await db
+    .from("wallets")
+    .update({ label: next })
     .eq("id", walletId)
     .select(SELECT_WALLET)
     .single();
