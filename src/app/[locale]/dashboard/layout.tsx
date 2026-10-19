@@ -44,6 +44,7 @@ export default async function DashboardLayout({
     { href: "/dashboard/orders", label: t("orders") },
     { href: "/dashboard/tokens", label: t("myTokens") },
     { href: "/dashboard/algos", label: t("algos") },
+    { href: "/dashboard/certificates", label: t("certificates") },
   ];
 
   // Tautan Admin hanya untuk akun ber-role admin.

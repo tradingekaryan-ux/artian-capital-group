@@ -11,6 +11,7 @@
     "myTokens": "My Tokens",
     "admin": "Admin",
     "algos": "Algos",
+    "certificates": "Certificates",
     "events": "Event Tracker",
     "faq": "FAQ"
   },
@@ -230,6 +231,27 @@
     "managePool": "Manage pool",
     "poolActive": "Pool active",
     "noPoolYet": "No pool yet"
+  },
+  "certificates": {
+    "title": "Certificates",
+    "subtitle": "Achievement certificates for your milestones — locked ones show exactly what to unlock them.",
+    "progress": "{done}/{total} unlocked",
+    "locked": "Locked",
+    "achieved": "Achieved",
+    "achievedOn": "Achieved {date}",
+    "progressOf": "{count} / {threshold}",
+    "items": {
+      "member": { "name": "New Member", "desc": "Registered an Artian Capital Group account" },
+      "token-devnet-1": { "name": "Devnet Token Creator", "desc": "Created1 token on your devnet practice wallet" },
+      "token-mainnet-1": { "name": "Mainnet Launcher", "desc": "Launched1 token on Solana mainnet" },
+      "token-mainnet-10": { "name": "Rising Launcher", "desc": "Launched10 mainnet tokens" },
+      "token-mainnet-100": { "name": "Established Launcher", "desc": "Launched100 mainnet tokens" },
+      "token-mainnet-1000": { "name": "Token Titan", "desc": "Launched1,000 mainnet tokens" },
+      "algo-1": { "name": "Algo Publisher", "desc": "Published1 trading algo" },
+      "algo-10": { "name": "Signal Provider", "desc": "Published10 trading algos" },
+      "algo-100": { "name": "Market Mentor", "desc": "Published100 trading algos" },
+      "algo-1000": { "name": "Quant Legend", "desc": "Published1,000 trading algos" }
+    }
   },
   "features": {
     "title": "Features",
