@@ -107,7 +107,6 @@
       "createWallet": "Create wallet",
       "createDemo": "Create demo wallet",
       "createMainnet": "Create mainnet wallet",
-      "labelPlaceholder": "Wallet label (e.g. Ops)",
       "creating": "Creating…",
       "onlyOneDemo": "You already have the demo wallet. Switch to it instead.",
       "demoBadge": "DEMO",

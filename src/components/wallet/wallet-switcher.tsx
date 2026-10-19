@@ -40,9 +40,9 @@ export function WalletSwitcher({ wallets, activeId }: { wallets: WalletItem[]; a
   }
 
   async function createWallet(kind: "mainnet" | "demo") {
-    const label =
-      kind === "mainnet" ? window.prompt(t("labelPlaceholder"), "") ?? undefined : undefined;
-    await post("/api/wallet", { action: kind === "demo" ? "create_demo" : "create_mainnet", label });
+    // Tanpa prompt label — server memberi nama otomatis ("Wallet 1", "Wallet 2", …)
+    // dan nama itu tampil di daftar switcher (lihat render di bawah).
+    await post("/api/wallet", { action: kind === "demo" ? "create_demo" : "create_mainnet" });
   }
 
   async function archiveWalletAction(walletId: string) {
@@ -105,7 +105,10 @@ export function WalletSwitcher({ wallets, activeId }: { wallets: WalletItem[]; a
                 }`}
               >
                 <span className="flex min-w-0 items-center gap-2">
-                  <span className="mono truncate text-xs">{w.public_key.slice(0, 6)}…{w.public_key.slice(-4)}</span>
+                  {w.label && <span className="truncate">{w.label}</span>}
+                  <span className="mono truncate text-xs text-muted-ink">
+                    {w.public_key.slice(0, 6)}…{w.public_key.slice(-4)}
+                  </span>
                   {w.kind === "demo" && (
                     <span className="rounded-full border-2 border-black bg-[#f5f3ff] px-2 py-0.5 text-[10px] uppercase">
                       {t("demoBadge")}
